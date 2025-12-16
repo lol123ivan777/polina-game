@@ -23,7 +23,7 @@ let currentLane = 1; // 0..3
 let score = 0;
 let scoreText;
 let gameOver = false;
-let speed = 350;
+let speed = 450;
 
 const LANE_COUNT = 4;
 const PLAYER_Y_OFFSET = 120;
