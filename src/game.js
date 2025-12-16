@@ -21,44 +21,44 @@ const THEMES = {
 };
 
 const ITEMS = [
-  { type: "poop", icon: "💩", score: -100, weight: 30 },
+  { type: "poop",  icon: "💩", score: -100, weight: 30 },
   { type: "ghost", icon: "👻", score: -100, weight: 20 },
   { type: "fruit", icon: ["🍒", "🍓"], score: +100, weight: 25 },
-  { type: "bomb", icon: "💣", score: -500, weight: 15 },
+  { type: "bomb",  icon: "💣", score: -500, weight: 15 },
   { type: "shield", icon: "🧿", shield: 4000, weight: 7 },
-  { type: "life", icon: "❤️", life: +1, weight: 2 },
-  { type: "flag", icon: "🇷🇺", score: +1000, weight: 1 }, // спец
+  { type: "life",  icon: "❤️", life: +1, weight: 2 },
+  { type: "flag",  icon: "🇷🇺", score: +1000, weight: 1 }, // спец
 ];
 
 const LANE_COUNT = 4;
 
 // ===============================
-// GAME STATE
+// GAME STATE (будем сбрасывать в create())
 // ===============================
 
 let player;
-let items = [];
-let lanes = [];
-let currentLane = 1;
+let items;
+let lanes;
+let currentLane;
 
-let score = 0;
-let lives = 3;
+let score;
+let lives;
 
-let level = 1;
-let levelTimer = 0;
-let currentSpeed = LEVELS[0].speed;
-let spawnDelay = LEVELS[0].spawn;
-let spawnTimer = 0;
+let level;
+let levelTimer;
+let currentSpeed;
+let spawnDelay;
+let spawnTimer;
 
-let theme = THEMES.pink;
-let shieldUntil = 0;
+let theme;
+let shieldUntil;
 
-let started = false;
-let gameOver = false;
-let rulesShown = false;
+let started;
+let gameOver;
+let rulesShown;
 
 // ограничения дропа
-let lifeDroppedThisLevel = false;
+let lifeDroppedThisLevel;
 
 // ===============================
 // PHASER
@@ -83,23 +83,46 @@ function preload() {}
 // CREATE
 // ===============================
 function create() {
+  // ✅ ЖЁСТКИЙ СБРОС ВСЕГО СОСТОЯНИЯ (иначе restart ломает игру)
+  items = [];
+  lanes = [];
+  currentLane = 1;
+
+  score = 0;
+  lives = 3;
+
+  level = 1;
+  levelTimer = 0;
+
+  currentSpeed = LEVELS[0].speed;
+  spawnDelay = LEVELS[0].spawn;
+  spawnTimer = 0;
+
+  theme = THEMES.pink;
+  shieldUntil = 0;
+
+  started = false;
+  gameOver = false;
+  rulesShown = false;
+
+  lifeDroppedThisLevel = false;
+
   const { width, height } = this.scale;
 
   // lanes
   const laneWidth = width / LANE_COUNT;
-  lanes = [];
   for (let i = 0; i < LANE_COUNT; i++) {
     lanes.push(laneWidth * i + laneWidth / 2);
   }
 
-  // road
+  // road (❌ setRadius нет в Phaser Rectangle)
   this.road = this.add.rectangle(
     width / 2,
     height / 2,
     Math.min(width - 30, 520),
     height + 50,
     theme.road
-  ).setRadius(24);
+  );
 
   // lane lines
   this.laneLines = [];
@@ -202,7 +225,7 @@ function update(_, delta) {
 
     theme = THEMES[cfg.theme];
     this.road.fillColor = theme.road;
-    this.laneLines.forEach(l => l.fillColor = theme.neon);
+    this.laneLines.forEach(l => (l.fillColor = theme.neon));
 
     this.levelText.setText(`LEVEL ${level}`);
   }
@@ -242,7 +265,7 @@ function update(_, delta) {
 // SPAWN ITEM
 // ===============================
 function spawnItem() {
-  let pool = ITEMS.filter(it => {
+  const pool = ITEMS.filter(it => {
     if (it.type === "life" && lifeDroppedThisLevel) return false;
     if (it.type === "flag" && level % 2 !== 0) return false;
     return true;
@@ -250,13 +273,12 @@ function spawnItem() {
 
   const total = pool.reduce((s, i) => s + i.weight, 0);
   let r = Math.random() * total;
-  let item;
+  let item = null;
 
   for (const it of pool) {
     r -= it.weight;
     if (r <= 0) { item = it; break; }
   }
-
   if (!item) return;
 
   if (item.type === "life") lifeDroppedThisLevel = true;
@@ -267,7 +289,6 @@ function spawnItem() {
 
   const lane = Phaser.Math.Between(0, LANE_COUNT - 1);
   const t = this.add.text(lanes[lane], -40, icon, { fontSize: "34px" }).setOrigin(0.5);
-  t.type = item.type;
   t.meta = item;
 
   items.push(t);
@@ -279,23 +300,27 @@ function spawnItem() {
 function handleHit(it) {
   const meta = it.meta;
 
-  if (meta.score) {
+  // очки
+  if (typeof meta.score === "number" && meta.score !== 0) {
     score += meta.score;
     this.scoreText.setText(score);
   }
 
+  // жизнь
   if (meta.life) {
     lives = Math.min(lives + 1, 5);
     this.livesText.setText("❤️".repeat(lives));
   }
 
+  // щит
   if (meta.shield) {
     shieldUntil = Date.now() + meta.shield;
   }
 
-  if (meta.score < 0 && !shieldUntil) {
+  // урон (только если нет щита)
+  if (typeof meta.score === "number" && meta.score < 0 && !shieldUntil) {
     lives--;
-    this.livesText.setText("❤️".repeat(lives));
+    this.livesText.setText("❤️".repeat(Math.max(0, lives)));
     if (lives <= 0) endGame.call(this);
   }
 }
@@ -305,6 +330,7 @@ function handleHit(it) {
 // ===============================
 function endGame() {
   gameOver = true;
+
   this.add.text(
     this.scale.width / 2,
     this.scale.height / 2,
