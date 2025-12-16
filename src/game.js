@@ -33,6 +33,12 @@ const ITEMS = [
 const LANE_COUNT = 4;
 
 // ===============================
+// USER
+// ===============================
+
+let username = localStorage.getItem("username") || null;
+
+// ===============================
 // GAME STATE (сброс в create())
 // ===============================
 
@@ -192,6 +198,60 @@ function create() {
 
   this.levelText = this.add.text(16, 72, "LEVEL 1", { fontSize: "16px", color: "#bbb" });
   this.levelText.setShadow(0, 0, "rgba(255,255,255,0.25)", 6);
+
+// ===============================
+// REGISTRATION
+// ===============================
+
+this.registrationOverlay = null;
+
+if (!username) {
+  this.registrationOverlay = this.add.container(
+    this.scale.width / 2,
+    this.scale.height / 2
+  );
+
+  const bg = this.add.rectangle(0, 0, 320, 220, 0x000000, 0.9)
+    .setStrokeStyle(2, theme.neon);
+
+  const title = this.add.text(0, -80, "ВВЕДИ НИК", {
+    fontSize: "22px",
+    color: "#fff"
+  }).setOrigin(0.5);
+
+  const input = document.createElement("input");
+  input.placeholder = "ник";
+  input.maxLength = 12;
+  input.style.position = "absolute";
+  input.style.top = "50%";
+  input.style.left = "50%";
+  input.style.transform = "translate(-50%, -50%)";
+  input.style.fontSize = "18px";
+  input.style.padding = "8px";
+  input.style.borderRadius = "8px";
+  input.style.border = "none";
+  input.style.outline = "none";
+  document.body.appendChild(input);
+
+  const btn = this.add.text(0, 70, "▶ СТАРТ", {
+    fontSize: "20px",
+    color: hex6(theme.neon)
+  }).setOrigin(0.5).setInteractive();
+
+  btn.on("pointerdown", () => {
+    const val = input.value.trim();
+    if (!val) return;
+
+    username = val;
+    localStorage.setItem("username", username);
+
+    document.body.removeChild(input);
+    this.registrationOverlay.destroy();
+    rulesShown = false;
+  });
+
+  this.registrationOverlay.add([bg, title, btn]);
+}
 
   // RULES OVERLAY
   this.rulesOverlay = this.add.text(
@@ -458,19 +518,50 @@ function handleHit(it) {
 function endGame() {
   gameOver = true;
 
-  tgHaptic("error");
+  saveScore(username || "anon", score);
+
+  const records = getRecords();
+
+  let table = "🏆 ТОП 5\n\n";
+  records.slice(0, 5).forEach((r, i) => {
+    table += `${i + 1}. ${r.name} — ${r.score}\n`;
+  });
+
   this.cameras.main.flash(200, 255, 0, 80);
   this.cameras.main.shake(220, 0.02);
-
-  // dim player
-  player.setAlpha(0.35);
-  player.glow.setAlpha(0.10);
-  player.shieldRing.setAlpha(0);
+  tgHaptic("error");
 
   this.add.text(
     this.scale.width / 2,
     this.scale.height / 2,
-    `💥 GAME OVER\n\nСчёт: ${score}\n\nТап для рестарта`,
-    { fontSize: "28px", color: "#fff", align: "center" }
+`💥 GAME OVER
+
+${username}, твой счёт: ${score}
+
+${table}
+
+Тап для рестарта`,
+    {
+      fontSize: "22px",
+      color: "#fff",
+      align: "center"
+    }
   ).setOrigin(0.5);
+}
+// ===============================
+// RECORDS
+// ===============================
+
+function saveScore(name, score) {
+  let records = JSON.parse(localStorage.getItem("records") || "[]");
+
+  records.push({ name, score });
+  records.sort((a, b) => b.score - a.score);
+  records = records.slice(0, 10);
+
+  localStorage.setItem("records", JSON.stringify(records));
+}
+
+function getRecords() {
+  return JSON.parse(localStorage.getItem("records") || "[]");
 }
