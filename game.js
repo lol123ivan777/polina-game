@@ -3,43 +3,30 @@ const config = {
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: "#777",
-  physics: {
-    default: "arcade",
-    arcade: {
-      gravity: { y: 0 },
-      debug: false
-    }
-  },
-  scene: {
-    preload,
-    create,
-    update
-  }
+  scene: { preload, create, update }
 };
 
 new Phaser.Game(config);
 
 // ---------- STATE ----------
 let player;
-let items;
+let items = [];
 let lanes = [];
 let currentLane = 1;
 let score = 0;
 let scoreText;
-let gameOver = false;
 let started = false;
-let spawnTimer;
+let gameOver = false;
+
+let spawnTimer = 0;
 
 const LANE_COUNT = 4;
 const PLAYER_Y_OFFSET = 120;
-const FALL_SPEED = 450;
+const FALL_SPEED = 6;
+const SPAWN_DELAY = 700;
 
 // ---------- PRELOAD ----------
-function preload() {
-  createEmojiTexture(this, "heart", "❤️");
-  createEmojiTexture(this, "poop", "💩");
-  createEmojiTexture(this, "car", "🚗");
-}
+function preload() {}
 
 // ---------- CREATE ----------
 function create() {
@@ -47,44 +34,35 @@ function create() {
   const laneWidth = width / LANE_COUNT;
 
   lanes = [];
+  items = [];
   score = 0;
-  gameOver = false;
   started = false;
+  gameOver = false;
+  spawnTimer = 0;
 
-  // --- ДОРОГА ---
+  // ROAD
   for (let i = 0; i < LANE_COUNT; i++) {
     lanes.push(laneWidth * i + laneWidth / 2);
-
     if (i > 0) {
-      this.add.rectangle(
-        laneWidth * i,
-        height / 2,
-        6,
-        height,
-        0x8e44ad
-      );
+      this.add.rectangle(laneWidth * i, height / 2, 6, height, 0x8e44ad);
     }
   }
 
-  // --- ИГРОК ---
-  player = this.physics.add.sprite(
+  // PLAYER
+  player = this.add.text(
     lanes[currentLane],
     height - PLAYER_Y_OFFSET,
-    "car"
-  );
-  player.setImmovable(true);
-  player.body.allowGravity = false;
+    "🚗",
+    { fontSize: "48px" }
+  ).setOrigin(0.5);
 
-  // --- ITEMS ---
-  items = this.physics.add.group();
-
-  // --- SCORE ---
+  // SCORE
   scoreText = this.add.text(20, 20, "0", {
     fontSize: "28px",
     color: "#fff"
   });
 
-  // --- START ---
+  // START TEXT
   const startText = this.add.text(
     width / 2,
     height / 2,
@@ -92,19 +70,11 @@ function create() {
     { fontSize: "32px", color: "#fff" }
   ).setOrigin(0.5);
 
-  // --- COLLISION ---
-  this.physics.add.overlap(player, items, onHit, null, this);
-
-  // --- INPUT ---
+  // INPUT
   this.input.on("pointerdown", pointer => {
     if (!started) {
       started = true;
       startText.destroy();
-      spawnTimer = this.time.addEvent({
-        delay: 600,
-        loop: true,
-        callback: () => spawnItem(this)
-      });
       return;
     }
 
@@ -114,82 +84,70 @@ function create() {
     }
 
     const lane = Math.floor(pointer.x / laneWidth);
-    moveToLane(lane);
-  });
-}
-
-// ---------- UPDATE ----------
-function update() {
-  if (!started || gameOver) return;
-
-  items.children.iterate(item => {
-    if (item && item.y > window.innerHeight + 80) {
-      item.destroy();
+    if (lane >= 0 && lane < LANE_COUNT) {
+      currentLane = lane;
+      player.x = lanes[currentLane];
     }
   });
 }
 
+// ---------- UPDATE ----------
+function update(time, delta) {
+  if (!started || gameOver) return;
+
+  // SPAWN
+  spawnTimer += delta;
+  if (spawnTimer >= SPAWN_DELAY) {
+    spawnTimer = 0;
+    spawnItem(this);
+  }
+
+  // MOVE ITEMS
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    item.y += FALL_SPEED;
+
+    // COLLISION
+    if (
+      Math.abs(item.x - player.x) < 30 &&
+      Math.abs(item.y - player.y) < 30
+    ) {
+      if (item.isHeart) {
+        score++;
+        scoreText.setText(score);
+        item.destroy();
+        items.splice(i, 1);
+      } else {
+        gameOver = true;
+        this.add.text(
+          this.scale.width / 2,
+          this.scale.height / 2,
+          "💥 ПРОИГРЫШ\n\nТапни чтобы заново",
+          { fontSize: "32px", color: "#fff", align: "center" }
+        ).setOrigin(0.5);
+      }
+    }
+
+    // REMOVE OFFSCREEN
+    if (item.y > window.innerHeight + 50) {
+      item.destroy();
+      items.splice(i, 1);
+    }
+  }
+}
+
 // ---------- SPAWN ----------
 function spawnItem(scene) {
-  if (gameOver) return;
-
   const laneIndex = Phaser.Math.Between(0, LANE_COUNT - 1);
   const x = lanes[laneIndex];
 
   const isHeart = Math.random() < 0.5;
-  const key = isHeart ? "heart" : "poop";
+  const emoji = isHeart ? "❤️" : "💩";
 
-  const item = scene.physics.add.sprite(x, -60, key);
-  item.setVelocityY(FALL_SPEED);
-  item.body.allowGravity = false;
+  const item = scene.add.text(x, -40, emoji, {
+    fontSize: "40px"
+  }).setOrigin(0.5);
+
   item.isHeart = isHeart;
-
-  items.add(item);
-}
-
-// ---------- COLLISION ----------
-function onHit(player, item) {
-  if (item.isHeart) {
-    score += 1;
-    scoreText.setText(score);
-    item.destroy();
-  } else {
-    endGame(this);
-  }
-}
-
-// ---------- MOVE ----------
-function moveToLane(lane) {
-  if (lane < 0 || lane >= LANE_COUNT) return;
-  currentLane = lane;
-  player.x = lanes[currentLane];
-}
-
-// ---------- GAME OVER ----------
-function endGame(scene) {
-  gameOver = true;
-  spawnTimer?.remove();
-
-  scene.add.text(
-    scene.scale.width / 2,
-    scene.scale.height / 2,
-    "💥 ПРОИГРЫШ\n\nТапни чтобы заново",
-    { fontSize: "32px", color: "#fff", align: "center" }
-  ).setOrigin(0.5);
-}
-
-// ---------- EMOJI → TEXTURE ----------
-function createEmojiTexture(scene, key, emoji) {
-  const size = 64;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-
-  const ctx = canvas.getContext("2d");
-  ctx.font = "48px serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(emoji, size / 2, size / 2);
-
-  scene.textures.addCanvas(key, canvas);
+  items.push(item);
 }
