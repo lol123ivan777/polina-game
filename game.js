@@ -2,7 +2,7 @@ const config = {
   type: Phaser.AUTO,
   width: window.innerWidth,
   height: window.innerHeight,
-  backgroundColor: "#777", // серая дорога
+  backgroundColor: "#777",
   physics: {
     default: "arcade",
     arcade: { debug: false }
@@ -16,31 +16,39 @@ const config = {
 
 new Phaser.Game(config);
 
+// ---------- STATE ----------
 let player;
 let items;
-let lanes = [];
-let currentLane = 1; // 0..3
-let score = 0;
+let lanes;
+let currentLane;
+let score;
 let scoreText;
-let gameOver = false;
-let speed = 450;
+let gameOver;
+let speed;
 
 const LANE_COUNT = 4;
 const PLAYER_Y_OFFSET = 120;
 
+// ---------- PRELOAD ----------
 function preload() {}
 
+// ---------- CREATE ----------
 function create() {
-  const { width, height } = this.scale;
+  // 🔴 СБРОС СОСТОЯНИЯ
+  lanes = [];
+  currentLane = 1;
+  score = 0;
+  gameOver = false;
+  speed = 450;
 
-  // --- ЛОГИКА ПОЛОС ---
+  const { width, height } = this.scale;
   const laneWidth = width / LANE_COUNT;
 
+  // --- ДОРОГА + ПОЛОСЫ ---
   for (let i = 0; i < LANE_COUNT; i++) {
     lanes.push(laneWidth * i + laneWidth / 2);
 
     if (i > 0) {
-      // фиолетовые линии
       this.add.rectangle(
         laneWidth * i,
         height / 2,
@@ -51,7 +59,7 @@ function create() {
     }
   }
 
-  // --- МАШИНКА (ЭМОДЗИ) ---
+  // --- ИГРОК ---
   player = this.add.text(
     lanes[currentLane],
     height - PLAYER_Y_OFFSET,
@@ -67,7 +75,7 @@ function create() {
   items = this.physics.add.group();
 
   this.time.addEvent({
-    delay: 900,
+    delay: 800,
     loop: true,
     callback: () => spawnItem(this)
   });
@@ -84,7 +92,7 @@ function create() {
   // --- УПРАВЛЕНИЕ ---
   this.input.on("pointerdown", pointer => {
     if (gameOver) {
-      restart(this);
+      this.scene.restart();
       return;
     }
 
@@ -93,32 +101,32 @@ function create() {
   });
 }
 
+// ---------- UPDATE ----------
 function update() {
   if (gameOver) return;
 
   items.children.iterate(item => {
-    if (item && item.y > window.innerHeight + 50) {
+    if (item && item.y > window.innerHeight + 60) {
       item.destroy();
     }
   });
 }
 
-// ---------- СПАВН ----------
-
+// ---------- SPAWN ----------
 function spawnItem(scene) {
+  if (gameOver) return;
+
   const laneIndex = Phaser.Math.Between(0, LANE_COUNT - 1);
   const x = lanes[laneIndex];
 
   const isHeart = Math.random() < 0.5;
   const emoji = isHeart ? "❤️" : "💩";
 
-  const item = scene.add.text(x, -50, emoji, {
+  const item = scene.add.text(x, -40, emoji, {
     fontSize: "40px"
   }).setOrigin(0.5);
 
   scene.physics.add.existing(item);
-
-  // 🔴 ВОТ ЭТО КЛЮЧ
   item.body.setSize(40, 40);
   item.body.setAllowGravity(false);
   item.body.setVelocityY(speed);
@@ -127,7 +135,7 @@ function spawnItem(scene) {
   items.add(item);
 }
 
-// ---------- СТОЛКНОВЕНИЕ ----------
+// ---------- COLLISION ----------
 function onHit(player, item) {
   if (item.isHeart) {
     score += 1;
@@ -138,7 +146,7 @@ function onHit(player, item) {
   }
 }
 
-// ---------- ДВИЖЕНИЕ ----------
+// ---------- MOVE ----------
 function moveToLane(lane) {
   if (lane < 0 || lane >= LANE_COUNT) return;
   currentLane = lane;
@@ -159,12 +167,4 @@ function endGame(scene) {
       align: "center"
     }
   ).setOrigin(0.5);
-}
-
-// ---------- RESTART ----------
-function restart(scene) {
-  gameOver = false;
-  score = 0;
-  speed = 350;
-  scene.scene.restart();
 }
