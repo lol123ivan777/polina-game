@@ -1,7 +1,3 @@
-const tg = window.Telegram?.WebApp;
-tg?.ready();
-tg?.expand();
-
 const config = {
   type: Phaser.AUTO,
   width: window.innerWidth,
@@ -11,115 +7,104 @@ const config = {
     default: "arcade",
     arcade: { debug: false }
   },
-  scene: { preload, create, update }
+  scene: {
+    preload,
+    create,
+    update
+  }
 };
 
 new Phaser.Game(config);
 
-// ---------- CONST ----------
-const LANE_COUNT = 4;
-const PLAYER_Y_OFFSET = 120;
-
 // ---------- STATE ----------
+let player;
+let items;
 let lanes = [];
 let currentLane = 1;
-
-let playerBody;
-let playerVisual;
-
-let items;
 let score = 0;
 let scoreText;
-
-let started = false;
 let gameOver = false;
 let speed = 450;
-let spawnEvent = null;
+let started = false;
+let spawnTimer;
+let startText;
+
+const LANE_COUNT = 4;
+const PLAYER_Y_OFFSET = 120;
 
 // ---------- PRELOAD ----------
 function preload() {}
 
 // ---------- CREATE ----------
 function create() {
-  lanes = [];
-  currentLane = 1;
-  score = 0;
-  started = false;
-  gameOver = false;
-  speed = 450;
-
   const { width, height } = this.scale;
   const laneWidth = width / LANE_COUNT;
 
-  // Полосы
+  // --- ДОРОГА ---
   for (let i = 0; i < LANE_COUNT; i++) {
     lanes.push(laneWidth * i + laneWidth / 2);
+
     if (i > 0) {
-      this.add.rectangle(laneWidth * i, height / 2, 6, height, 0x8e44ad);
+      this.add.rectangle(
+        laneWidth * i,
+        height / 2,
+        6,
+        height,
+        0x8e44ad
+      );
     }
   }
 
-  // UI
-  scoreText = this.add.text(20, 20, "0", {
-    fontSize: "28px",
-    color: "#fff"
-  });
-
-  // Игрок (физика)
-  playerBody = this.add.rectangle(
-    lanes[currentLane],
-    height - PLAYER_Y_OFFSET,
-    60,
-    60,
-    0x000000,
-    0
-  );
-  this.physics.add.existing(playerBody);
-  playerBody.body.setImmovable(true);
-  playerBody.body.setAllowGravity(false);
-
-  // Игрок (визуал)
-  playerVisual = this.add.text(
+  // --- ИГРОК ---
+  player = this.add.text(
     lanes[currentLane],
     height - PLAYER_Y_OFFSET,
     "🚗",
     { fontSize: "48px" }
   ).setOrigin(0.5);
 
-  // Объекты
+  this.physics.add.existing(player);
+  player.body.setImmovable(true);
+  player.body.setAllowGravity(false);
+
+  // --- ГРУППА ПРЕДМЕТОВ ---
   items = this.physics.add.group();
 
-  // Коллизии
-  this.physics.add.overlap(playerBody, items, onHit, null, this);
+  // --- СЧЁТ ---
+  scoreText = this.add.text(20, 20, "0", {
+    fontSize: "28px",
+    color: "#fff"
+  });
 
-  // Telegram-кнопка старта
-  if (tg) {
-    tg.MainButton.setText("▶️ Начать игру");
-    tg.MainButton.show();
-
-    tg.MainButton.onClick(() => {
-      if (started) return;
-      started = true;
-
-      spawnEvent = this.time.addEvent({
-        delay: 700,
-        loop: true,
-        callback: () => spawnItem(this)
-      });
-
-      spawnItem(this);
-      tg.MainButton.hide();
-    });
-  }
-
-  // Управление полосами
-  this.input.on("pointerdown", pointer => {
-    if (!started || gameOver) return;
-    const lane = Math.floor(pointer.x / laneWidth);
-    if (lane >= 0 && lane < LANE_COUNT) {
-      currentLane = lane;
-      playerBody.x = lanes[currentLane];
+  // --- START SCREEN ---
+  startText = this.add.text(
+    width / 2,
+    height / 2,
+    "🚦 ТАПНИ ЧТОБЫ НАЧАТЬ",
+    {
+      fontSize: "32px",
+      color: "#fff",
+      align: "center"
     }
+  ).setOrigin(0.5);
+
+  // --- COLLISION ---
+  this.physics.add.overlap(player, items, onHit, null, this);
+
+  // --- INPUT ---
+  this.input.on("pointerdown", pointer => {
+    if (!started) {
+      startGame(this);
+      return;
+    }
+
+    if (gameOver) {
+      this.scene.restart();
+      return;
+    }
+
+    const lane = Math.floor(pointer.x / laneWidth);
+    moveToLane(lane);
   });
 }
 
@@ -127,27 +112,28 @@ function create() {
 function update() {
   if (!started || gameOver) return;
 
-  playerVisual.x = playerBody.x;
-  playerVisual.y = playerBody.y;
-
   items.children.iterate(item => {
-    if (!item) return;
-
-    if (item.visual) {
-      item.visual.x = item.x;
-      item.visual.y = item.y;
-    }
-
-    if (item.y > window.innerHeight + 80) {
-      if (item.visual) item.visual.destroy();
+    if (item && item.y > window.innerHeight + 60) {
       item.destroy();
     }
   });
 }
 
+// ---------- START GAME ----------
+function startGame(scene) {
+  started = true;
+  startText.destroy();
+
+  spawnTimer = scene.time.addEvent({
+    delay: 700,
+    loop: true,
+    callback: () => spawnItem(scene)
+  });
+}
+
 // ---------- SPAWN ----------
 function spawnItem(scene) {
-  if (!started || gameOver) return;
+  if (gameOver) return;
 
   const laneIndex = Phaser.Math.Between(0, LANE_COUNT - 1);
   const x = lanes[laneIndex];
@@ -155,46 +141,49 @@ function spawnItem(scene) {
   const isHeart = Math.random() < 0.5;
   const emoji = isHeart ? "❤️" : "💩";
 
-  const body = scene.add.rectangle(x, -40, 44, 44, 0x000000, 0);
-  scene.physics.add.existing(body);
-  body.body.setAllowGravity(false);
-  body.body.setVelocityY(speed);
-
-  const visual = scene.add.text(x, -40, emoji, {
-    fontSize: "42px"
+  const item = scene.add.text(x, -40, emoji, {
+    fontSize: "40px"
   }).setOrigin(0.5);
 
-  body.isHeart = isHeart;
-  body.visual = visual;
+  scene.physics.add.existing(item);
+  item.body.setSize(40, 40);
+  item.body.setAllowGravity(false);
+  item.body.setVelocityY(speed);
 
-  items.add(body);
+  item.isHeart = isHeart;
+  items.add(item);
 }
 
-// ---------- HIT ----------
-function onHit(_player, item) {
-  if (!item || gameOver) return;
-
+// ---------- COLLISION ----------
+function onHit(player, item) {
   if (item.isHeart) {
-    score++;
-    scoreText.setText(String(score));
-    if (item.visual) item.visual.destroy();
+    score += 1;
+    scoreText.setText(score);
     item.destroy();
   } else {
     endGame(this);
   }
 }
 
+// ---------- MOVE ----------
+function moveToLane(lane) {
+  if (lane < 0 || lane >= LANE_COUNT) return;
+  currentLane = lane;
+  player.x = lanes[currentLane];
+}
+
 // ---------- GAME OVER ----------
 function endGame(scene) {
   gameOver = true;
-  if (spawnEvent) spawnEvent.remove(false);
+
+  spawnTimer?.remove();
 
   scene.add.text(
     scene.scale.width / 2,
     scene.scale.height / 2,
-    "💥 ПРОИГРЫШ\n\nЗакрой и запусти снова",
+    "💥 ПРОИГРЫШ\n\nТапни чтобы заново",
     {
-      fontSize: "34px",
+      fontSize: "32px",
       color: "#fff",
       align: "center"
     }
