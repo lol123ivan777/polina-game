@@ -5,7 +5,10 @@ const config = {
   backgroundColor: "#777",
   physics: {
     default: "arcade",
-    arcade: { debug: false }
+    arcade: {
+      gravity: { y: 0 },
+      debug: false
+    }
   },
   scene: {
     preload,
@@ -24,21 +27,29 @@ let currentLane = 1;
 let score = 0;
 let scoreText;
 let gameOver = false;
-let speed = 450;
 let started = false;
 let spawnTimer;
-let startText;
 
 const LANE_COUNT = 4;
 const PLAYER_Y_OFFSET = 120;
+const FALL_SPEED = 450;
 
 // ---------- PRELOAD ----------
-function preload() {}
+function preload() {
+  createEmojiTexture(this, "heart", "❤️");
+  createEmojiTexture(this, "poop", "💩");
+  createEmojiTexture(this, "car", "🚗");
+}
 
 // ---------- CREATE ----------
 function create() {
   const { width, height } = this.scale;
   const laneWidth = width / LANE_COUNT;
+
+  lanes = [];
+  score = 0;
+  gameOver = false;
+  started = false;
 
   // --- ДОРОГА ---
   for (let i = 0; i < LANE_COUNT; i++) {
@@ -56,36 +67,29 @@ function create() {
   }
 
   // --- ИГРОК ---
-  player = this.add.text(
+  player = this.physics.add.sprite(
     lanes[currentLane],
     height - PLAYER_Y_OFFSET,
-    "🚗",
-    { fontSize: "48px" }
-  ).setOrigin(0.5);
+    "car"
+  );
+  player.setImmovable(true);
+  player.body.allowGravity = false;
 
-  this.physics.add.existing(player);
-  player.body.setImmovable(true);
-  player.body.setAllowGravity(false);
-
-  // --- ГРУППА ПРЕДМЕТОВ ---
+  // --- ITEMS ---
   items = this.physics.add.group();
 
-  // --- СЧЁТ ---
+  // --- SCORE ---
   scoreText = this.add.text(20, 20, "0", {
     fontSize: "28px",
     color: "#fff"
   });
 
-  // --- START SCREEN ---
-  startText = this.add.text(
+  // --- START ---
+  const startText = this.add.text(
     width / 2,
     height / 2,
     "🚦 ТАПНИ ЧТОБЫ НАЧАТЬ",
-    {
-      fontSize: "32px",
-      color: "#fff",
-      align: "center"
-    }
+    { fontSize: "32px", color: "#fff" }
   ).setOrigin(0.5);
 
   // --- COLLISION ---
@@ -94,7 +98,13 @@ function create() {
   // --- INPUT ---
   this.input.on("pointerdown", pointer => {
     if (!started) {
-      startGame(this);
+      started = true;
+      startText.destroy();
+      spawnTimer = this.time.addEvent({
+        delay: 600,
+        loop: true,
+        callback: () => spawnItem(this)
+      });
       return;
     }
 
@@ -113,21 +123,9 @@ function update() {
   if (!started || gameOver) return;
 
   items.children.iterate(item => {
-    if (item && item.y > window.innerHeight + 60) {
+    if (item && item.y > window.innerHeight + 80) {
       item.destroy();
     }
-  });
-}
-
-// ---------- START GAME ----------
-function startGame(scene) {
-  started = true;
-  startText.destroy();
-
-  spawnTimer = scene.time.addEvent({
-    delay: 700,
-    loop: true,
-    callback: () => spawnItem(scene)
   });
 }
 
@@ -139,18 +137,13 @@ function spawnItem(scene) {
   const x = lanes[laneIndex];
 
   const isHeart = Math.random() < 0.5;
-  const emoji = isHeart ? "❤️" : "💩";
+  const key = isHeart ? "heart" : "poop";
 
-  const item = scene.add.text(x, -40, emoji, {
-    fontSize: "40px"
-  }).setOrigin(0.5);
-
-  scene.physics.add.existing(item);
-  item.body.setSize(40, 40);
-  item.body.setAllowGravity(false);
-  item.body.setVelocityY(speed);
-
+  const item = scene.physics.add.sprite(x, -60, key);
+  item.setVelocityY(FALL_SPEED);
+  item.body.allowGravity = false;
   item.isHeart = isHeart;
+
   items.add(item);
 }
 
@@ -175,17 +168,28 @@ function moveToLane(lane) {
 // ---------- GAME OVER ----------
 function endGame(scene) {
   gameOver = true;
-
   spawnTimer?.remove();
 
   scene.add.text(
     scene.scale.width / 2,
     scene.scale.height / 2,
     "💥 ПРОИГРЫШ\n\nТапни чтобы заново",
-    {
-      fontSize: "32px",
-      color: "#fff",
-      align: "center"
-    }
+    { fontSize: "32px", color: "#fff", align: "center" }
   ).setOrigin(0.5);
+}
+
+// ---------- EMOJI → TEXTURE ----------
+function createEmojiTexture(scene, key, emoji) {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  ctx.font = "48px serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(emoji, size / 2, size / 2);
+
+  scene.textures.addCanvas(key, canvas);
 }
