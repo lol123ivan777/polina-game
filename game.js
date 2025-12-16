@@ -104,6 +104,7 @@ function update() {
 }
 
 // ---------- СПАВН ----------
+
 function spawnItem(scene) {
   const laneIndex = Phaser.Math.Between(0, LANE_COUNT - 1);
   const x = lanes[laneIndex];
@@ -116,8 +117,11 @@ function spawnItem(scene) {
   }).setOrigin(0.5);
 
   scene.physics.add.existing(item);
-  item.body.setVelocityY(speed);
+
+  // 🔴 ВОТ ЭТО КЛЮЧ
+  item.body.setSize(40, 40);
   item.body.setAllowGravity(false);
+  item.body.setVelocityY(speed);
 
   item.isHeart = isHeart;
   items.add(item);
