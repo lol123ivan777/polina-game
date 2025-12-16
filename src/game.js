@@ -33,7 +33,7 @@ const ITEMS = [
 const LANE_COUNT = 4;
 
 // ===============================
-// GAME STATE (будем сбрасывать в create())
+// GAME STATE (сброс в create())
 // ===============================
 
 let player;
@@ -61,6 +61,25 @@ let rulesShown;
 let lifeDroppedThisLevel;
 
 // ===============================
+// HELPERS
+// ===============================
+
+function hex6(n) {
+  return `#${(n >>> 0).toString(16).padStart(6, "0")}`;
+}
+
+function tgHaptic(kind) {
+  const tg = window.Telegram?.WebApp;
+  const h = tg?.HapticFeedback;
+  if (!h) return;
+  try {
+    if (kind === "success") h.notificationOccurred("success");
+    else if (kind === "error") h.notificationOccurred("error");
+    else h.impactOccurred(kind); // "light" | "medium" | "heavy"
+  } catch {}
+}
+
+// ===============================
 // PHASER
 // ===============================
 
@@ -83,7 +102,7 @@ function preload() {}
 // CREATE
 // ===============================
 function create() {
-  // ✅ ЖЁСТКИЙ СБРОС ВСЕГО СОСТОЯНИЯ (иначе restart ломает игру)
+  // ✅ RESET STATE
   items = [];
   lanes = [];
   currentLane = 1;
@@ -109,13 +128,17 @@ function create() {
 
   const { width, height } = this.scale;
 
+  // --- subtle background glow layer ---
+  this.bg = this.add.rectangle(width / 2, height / 2, width, height, theme.neon, 0.08);
+  this.bg.setDepth(-2);
+
   // lanes
   const laneWidth = width / LANE_COUNT;
   for (let i = 0; i < LANE_COUNT; i++) {
     lanes.push(laneWidth * i + laneWidth / 2);
   }
 
-  // road (❌ setRadius нет в Phaser Rectangle)
+  // road
   this.road = this.add.rectangle(
     width / 2,
     height / 2,
@@ -123,22 +146,25 @@ function create() {
     height + 50,
     theme.road
   );
+  this.road.setDepth(-1);
 
-  // lane lines
+  // lane lines (dashes)
   this.laneLines = [];
+  const dashH = 26;
+  const gap = 28;
+  const laneX0 = width / 2 - this.road.width / 2;
   for (let i = 1; i < LANE_COUNT; i++) {
-    const line = this.add.rectangle(
-      width / 2 - this.road.width / 2 + (this.road.width / LANE_COUNT) * i,
-      height / 2,
-      4,
-      height,
-      theme.neon,
-      0.4
-    );
-    this.laneLines.push(line);
+    const x = laneX0 + (this.road.width / LANE_COUNT) * i;
+    const dashes = [];
+    for (let y = -20; y < height + 60; y += (dashH + gap)) {
+      const r = this.add.rectangle(x, y, 4, dashH, theme.neon, 0.55);
+      r.setDepth(-0.5);
+      dashes.push(r);
+    }
+    this.laneLines.push(dashes);
   }
 
-  // player
+  // player (emoji)
   player = this.add.text(
     lanes[currentLane],
     height - 120,
@@ -146,10 +172,26 @@ function create() {
     { fontSize: "42px" }
   ).setOrigin(0.5);
 
+  // player glow (fake neon)
+  player.glow = this.add.text(
+    player.x,
+    player.y,
+    player.text,
+    { fontSize: "42px", color: hex6(theme.neon) }
+  ).setOrigin(0.5).setAlpha(0.30);
+
+  // shield ring indicator (hidden by default)
+  player.shieldRing = this.add.circle(player.x, player.y, 34, theme.neon, 0.18).setAlpha(0);
+
   // UI
   this.scoreText = this.add.text(16, 16, "0", { fontSize: "24px", color: "#fff" });
+  this.scoreText.setShadow(0, 0, hex6(theme.neon), 10);
+
   this.livesText = this.add.text(16, 44, "❤️❤️❤️", { fontSize: "22px" });
-  this.levelText = this.add.text(16, 72, "LEVEL 1", { fontSize: "16px", color: "#aaa" });
+  this.livesText.setShadow(0, 0, "rgba(255,0,120,0.6)", 8);
+
+  this.levelText = this.add.text(16, 72, "LEVEL 1", { fontSize: "16px", color: "#bbb" });
+  this.levelText.setShadow(0, 0, "rgba(255,255,255,0.25)", 6);
 
   // RULES OVERLAY
   this.rulesOverlay = this.add.text(
@@ -181,6 +223,9 @@ function create() {
 
     if (!started) {
       started = true;
+      // маленький стартовый “пинок”
+      this.cameras.main.flash(120, 0, 255, 180);
+      tgHaptic("light");
       return;
     }
 
@@ -212,6 +257,20 @@ function update(_, delta) {
 
   const now = Date.now();
 
+  // keep player glow + shield ring synced
+  player.glow.x = player.x;
+  player.glow.y = player.y;
+  player.shieldRing.x = player.x;
+  player.shieldRing.y = player.y;
+
+  // animate lane dashes to fake movement
+  for (const dashes of this.laneLines) {
+    for (const r of dashes) {
+      r.y += currentSpeed * 0.35;
+      if (r.y > this.scale.height + 40) r.y = -40;
+    }
+  }
+
   // LEVEL TIMER
   levelTimer += delta;
   if (levelTimer >= LEVEL_DURATION) {
@@ -224,10 +283,24 @@ function update(_, delta) {
     spawnDelay = cfg.spawn;
 
     theme = THEMES[cfg.theme];
-    this.road.fillColor = theme.road;
-    this.laneLines.forEach(l => (l.fillColor = theme.neon));
 
+    // apply theme
+    this.road.fillColor = theme.road;
+    this.bg.fillColor = theme.neon;
+    player.glow.setColor(hex6(theme.neon));
+    player.shieldRing.setFillStyle(theme.neon, 0.18);
+
+    // recolor lane dashes
+    for (const dashes of this.laneLines) {
+      for (const r of dashes) r.fillColor = theme.neon;
+    }
+
+    this.scoreText.setShadow(0, 0, hex6(theme.neon), 10);
     this.levelText.setText(`LEVEL ${level}`);
+
+    // level transition effect
+    this.cameras.main.flash(120, 0, 255, 180);
+    tgHaptic("medium");
   }
 
   // SPAWN
@@ -241,15 +314,24 @@ function update(_, delta) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     it.y += currentSpeed;
+    if (it.glow) {
+      it.glow.x = it.x;
+      it.glow.y = it.y;
+    }
 
+    // collision
     if (Math.abs(it.x - player.x) < 28 && Math.abs(it.y - player.y) < 28) {
       handleHit.call(this, it);
+
+      if (it.glow) it.glow.destroy();
       it.destroy();
       items.splice(i, 1);
       continue;
     }
 
-    if (it.y > this.scale.height + 40) {
+    // cleanup
+    if (it.y > this.scale.height + 60) {
+      if (it.glow) it.glow.destroy();
       it.destroy();
       items.splice(i, 1);
     }
@@ -258,6 +340,8 @@ function update(_, delta) {
   // SHIELD EXPIRE
   if (shieldUntil && now > shieldUntil) {
     shieldUntil = 0;
+    player.setAlpha(1);
+    player.shieldRing.setAlpha(0);
   }
 }
 
@@ -288,8 +372,22 @@ function spawnItem() {
     : item.icon;
 
   const lane = Phaser.Math.Between(0, LANE_COUNT - 1);
+
   const t = this.add.text(lanes[lane], -40, icon, { fontSize: "34px" }).setOrigin(0.5);
   t.meta = item;
+
+  // glow for item
+  t.glow = this.add.text(t.x, t.y, t.text, { fontSize: "34px", color: hex6(theme.neon) })
+    .setOrigin(0.5)
+    .setAlpha(0.25);
+
+  // micro pulse
+  this.tweens.add({
+    targets: [t, t.glow],
+    scale: 1.12,
+    duration: 140,
+    yoyo: true
+  });
 
   items.push(t);
 }
@@ -300,28 +398,57 @@ function spawnItem() {
 function handleHit(it) {
   const meta = it.meta;
 
-  // очки
+  const hasShield = !!shieldUntil;
+
+  // score changes
   if (typeof meta.score === "number" && meta.score !== 0) {
     score += meta.score;
     this.scoreText.setText(score);
+
+    // arcade bump
+    this.tweens.add({
+      targets: this.scoreText,
+      scale: 1.18,
+      duration: 90,
+      yoyo: true
+    });
   }
 
-  // жизнь
+  // life
   if (meta.life) {
     lives = Math.min(lives + 1, 5);
     this.livesText.setText("❤️".repeat(lives));
+    tgHaptic("success");
   }
 
-  // щит
+  // shield
   if (meta.shield) {
     shieldUntil = Date.now() + meta.shield;
+    player.setAlpha(0.75);
+    player.shieldRing.setAlpha(1);
+    tgHaptic("medium");
   }
 
-  // урон (только если нет щита)
-  if (typeof meta.score === "number" && meta.score < 0 && !shieldUntil) {
+  // damage (negative score types) only if no shield
+  if (typeof meta.score === "number" && meta.score < 0 && !hasShield) {
     lives--;
     this.livesText.setText("❤️".repeat(Math.max(0, lives)));
+
+    // hit feedback
+    this.cameras.main.flash(120, 255, 0, 80);
+    this.cameras.main.shake(120, 0.012);
+    tgHaptic("heavy");
+
     if (lives <= 0) endGame.call(this);
+    return;
+  }
+
+  // non-damage feedback (bonus or blocked by shield)
+  if (typeof meta.score === "number" && meta.score > 0) tgHaptic("light");
+  if (typeof meta.score === "number" && meta.score < 0 && hasShield) {
+    // blocked hit feels good
+    this.cameras.main.flash(90, 0, 255, 240);
+    tgHaptic("light");
   }
 }
 
@@ -331,10 +458,19 @@ function handleHit(it) {
 function endGame() {
   gameOver = true;
 
+  tgHaptic("error");
+  this.cameras.main.flash(200, 255, 0, 80);
+  this.cameras.main.shake(220, 0.02);
+
+  // dim player
+  player.setAlpha(0.35);
+  player.glow.setAlpha(0.10);
+  player.shieldRing.setAlpha(0);
+
   this.add.text(
     this.scale.width / 2,
     this.scale.height / 2,
-    `💥 GAME OVER\n\n${score}\n\nТап для рестарта`,
+    `💥 GAME OVER\n\nСчёт: ${score}\n\nТап для рестарта`,
     { fontSize: "28px", color: "#fff", align: "center" }
   ).setOrigin(0.5);
 }
