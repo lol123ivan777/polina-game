@@ -26,10 +26,11 @@ function preload() {}
 function create() {
   const { width, height } = this.scale;
 
-  // Игрок (временно квадрат)
-  player = this.physics.add.rectangle(width / 2, height - 150, 80, 80, 0xffffff);
+  // Игрок
+  player = this.add.rectangle(width / 2, height - 150, 80, 80, 0xffffff);
   this.physics.add.existing(player);
   player.body.setImmovable(true);
+  player.body.setAllowGravity(false);
 
   // Группа препятствий
   obstacles = this.physics.add.group();
@@ -44,7 +45,7 @@ function create() {
   // Коллизия
   this.physics.add.overlap(player, obstacles, hit, null, this);
 
-  // Свайпы
+  // Управление
   this.input.on("pointermove", pointer => {
     if (gameOver) return;
     player.x = Phaser.Math.Clamp(pointer.x, 40, width - 40);
@@ -60,15 +61,18 @@ function update() {
     }
   });
 
-  speed += 0.05; // ускорение со временем
+  speed += 0.05;
 }
 
 function spawnObstacle(scene) {
   const x = Phaser.Math.Between(40, window.innerWidth - 40);
-  const obstacle = scene.add.rectangle(x, -100, 60, 60, 0xff4444);
+
+  const obstacle = scene.add.rectangle(x, -50, 60, 60, 0xff4444);
   scene.physics.add.existing(obstacle);
 
   obstacle.body.setVelocityY(speed);
+  obstacle.body.setAllowGravity(false);
+
   obstacles.add(obstacle);
 }
 
@@ -76,7 +80,7 @@ function hit() {
   gameOver = true;
   player.fillColor = 0xff0000;
 
-  const text = this.add.text(
+  this.add.text(
     window.innerWidth / 2,
     window.innerHeight / 2,
     "ЛИЦО НЕ ВЫВЕЗЛО",
