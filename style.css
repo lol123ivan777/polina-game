@@ -1,10 +1,11 @@
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
   height: 100%;
-  background: radial-gradient(circle at 30% 20%, #2a0040 0%, #070712 45%, #000 100%);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 20%, #3b003b 0%, #0a0010 40%, #000 100%);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
 }
 
 canvas {
@@ -13,14 +14,12 @@ canvas {
   height: 100vh;
   margin: 0 auto;
 
-  /* “неоновая дымка” вокруг канваса */
-  filter: drop-shadow(0 0 18px rgba(0, 229, 255, 0.18))
-          drop-shadow(0 0 22px rgba(179, 0, 255, 0.14));
+  filter:
+    drop-shadow(0 0 20px rgba(255, 43, 143, 0.35))
+    drop-shadow(0 0 26px rgba(255, 0, 80, 0.25));
 }
 
-/* чтобы свайпы не превращались в скролл */
 body {
   touch-action: none;
-  -webkit-user-select: none;
   user-select: none;
 }
