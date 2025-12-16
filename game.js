@@ -12,6 +12,10 @@ const config = {
 
 new Phaser.Game(config);
 
+// ---------- CONSTANTS ----------
+const LANE_COUNT = 4;
+const PLAYER_Y_OFFSET = 120;
+
 // ---------- STATE ----------
 let player;
 let items;
@@ -21,65 +25,92 @@ let currentLane = 1;
 let score = 0;
 let scoreText;
 
-let gameOver = false;
 let started = false;
+let gameOver = false;
 
 let speed = 450;
 let spawnEvent = null;
 
-const LANE_COUNT = 4;
-const PLAYER_Y_OFFSET = 120;
-
+// ---------- PRELOAD ----------
 function preload() {}
 
+// ---------- CREATE ----------
 function create() {
-  // reset per scene start
+  // RESET STATE
   lanes = [];
   currentLane = 1;
   score = 0;
-  gameOver = false;
   started = false;
+  gameOver = false;
   speed = 450;
 
   const { width, height } = this.scale;
   const laneWidth = width / LANE_COUNT;
 
-  // road separators
+  // ROAD + LANES
   for (let i = 0; i < LANE_COUNT; i++) {
     lanes.push(laneWidth * i + laneWidth / 2);
+
     if (i > 0) {
-      this.add.rectangle(laneWidth * i, height / 2, 6, height, 0x8e44ad);
+      this.add.rectangle(
+        laneWidth * i,
+        height / 2,
+        6,
+        height,
+        0x8e44ad
+      );
     }
   }
 
   // UI
-  scoreText = this.add.text(20, 20, "0", { fontSize: "28px", color: "#fff" });
+  scoreText = this.add.text(20, 20, "0", {
+    fontSize: "28px",
+    color: "#fff"
+  });
 
   const startText = this.add.text(
     width / 2,
     height / 2,
     "Тапни, чтобы начать",
-    { fontSize: "34px", color: "#fff", align: "center" }
+    {
+      fontSize: "34px",
+      color: "#fff",
+      align: "center"
+    }
   ).setOrigin(0.5);
 
-  // player car
-  player = this.add.text(lanes[currentLane], height - PLAYER_Y_OFFSET, "🚗", {
-    fontSize: "48px"
-  }).setOrigin(0.5);
+  // PLAYER (PHYSICS = RECTANGLE)
+  const playerBody = this.add.rectangle(
+    lanes[currentLane],
+    height - PLAYER_Y_OFFSET,
+    60,
+    60,
+    0x000000,
+    0
+  );
+  this.physics.add.existing(playerBody);
+  playerBody.body.setImmovable(true);
+  playerBody.body.setAllowGravity(false);
 
-  this.physics.add.existing(player);
-  player.body.setImmovable(true);
-  player.body.setAllowGravity(false);
-  // фикс: у текста body бывает 0x0
-  player.body.setSize(60, 60);
+  const playerVisual = this.add.text(
+    lanes[currentLane],
+    height - PLAYER_Y_OFFSET,
+    "🚗",
+    { fontSize: "48px" }
+  ).setOrigin(0.5);
 
-  // items group
+  player = {
+    body: playerBody,
+    visual: playerVisual
+  };
+
+  // ITEMS GROUP
   items = this.physics.add.group();
 
-  // collisions
-  this.physics.add.overlap(player, items, onHit, null, this);
+  // COLLISIONS
+  this.physics.add.overlap(player.body, items, onHit, null, this);
 
-  // input: start / move / restart
+  // INPUT
   this.input.on("pointerdown", (pointer) => {
     if (gameOver) {
       this.scene.restart();
@@ -90,39 +121,46 @@ function create() {
       started = true;
       startText.destroy();
 
-      // 💥 гарантированный спавн (сохраняем event)
       spawnEvent = this.time.addEvent({
-        delay: 650,
+        delay: 700,
         loop: true,
         callback: () => spawnItem(this)
       });
 
-      // мгновенно спавним 1 штуку для проверки
+      // test spawn instantly
       spawnItem(this);
       return;
     }
 
-    // move between lanes after start
     const lane = Math.floor(pointer.x / laneWidth);
     moveToLane(lane);
   });
-
-  // debug tick: если видишь, значит update жив
-  this._debugDot = this.add.circle(10, height - 10, 6, 0xffffff);
 }
 
+// ---------- UPDATE ----------
 function update() {
-  // debug animation
-  if (this._debugDot) this._debugDot.alpha = this._debugDot.alpha === 1 ? 0.2 : 1;
-
   if (!started || gameOver) return;
 
-  // cleanup
-  items.children.iterate((item) => {
-    if (item && item.y > window.innerHeight + 80) item.destroy();
+  // sync player visual
+  player.visual.x = player.body.x;
+  player.visual.y = player.body.y;
+
+  items.children.iterate(item => {
+    if (!item) return;
+
+    if (item.visual) {
+      item.visual.x = item.x;
+      item.visual.y = item.y;
+    }
+
+    if (item.y > window.innerHeight + 80) {
+      if (item.visual) item.visual.destroy();
+      item.destroy();
+    }
   });
 }
 
+// ---------- SPAWN ----------
 function spawnItem(scene) {
   if (!started || gameOver) return;
 
@@ -132,40 +170,46 @@ function spawnItem(scene) {
   const isHeart = Math.random() < 0.5;
   const emoji = isHeart ? "❤️" : "💩";
 
-  const item = scene.add.text(x, -40, emoji, { fontSize: "42px" }).setOrigin(0.5);
+  const body = scene.add.rectangle(x, -40, 44, 44, 0x000000, 0);
+  scene.physics.add.existing(body);
+  body.body.setAllowGravity(false);
+  body.body.setVelocityY(speed);
 
-  scene.physics.add.existing(item);
-  item.body.setAllowGravity(false);
-  item.body.setVelocityY(speed);
+  const visual = scene.add.text(x, -40, emoji, {
+    fontSize: "42px"
+  }).setOrigin(0.5);
 
-  // важное: у текста физ.размер бывает нулевой
-  item.body.setSize(50, 50);
+  body.isHeart = isHeart;
+  body.visual = visual;
 
-  item.isHeart = isHeart;
-  items.add(item);
+  items.add(body);
 }
 
+// ---------- COLLISION ----------
 function onHit(_player, item) {
   if (!item || gameOver) return;
 
   if (item.isHeart) {
     score += 1;
     scoreText.setText(String(score));
+
+    if (item.visual) item.visual.destroy();
     item.destroy();
 
-    // лёгкое ускорение за “успех”
     speed = Math.min(speed + 10, 900);
   } else {
     endGame(this);
   }
 }
 
+// ---------- MOVE ----------
 function moveToLane(lane) {
   if (lane < 0 || lane >= LANE_COUNT) return;
   currentLane = lane;
-  player.x = lanes[currentLane];
+  player.body.x = lanes[currentLane];
 }
 
+// ---------- GAME OVER ----------
 function endGame(scene) {
   gameOver = true;
 
@@ -175,6 +219,10 @@ function endGame(scene) {
     scene.scale.width / 2,
     scene.scale.height / 2,
     "💥 ПРОИГРЫШ\n\nТапни, чтобы заново",
-    { fontSize: "34px", color: "#fff", align: "center" }
+    {
+      fontSize: "34px",
+      color: "#fff",
+      align: "center"
+    }
   ).setOrigin(0.5);
 }
