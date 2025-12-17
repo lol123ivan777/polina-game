@@ -1,29 +1,34 @@
-document.title = "PolinaBibi v4";
-console.log("GAME.JS LOADED v4");
+document.title = "PolinaBibi v3";
+console.log("GAME.JS LOADED v3");
 
 (() => {
 
-  /* ================= CONFIG ================= */
+  /* ================== CONFIG ================== */
 
   const CONFIG = {
     lanes: 4,
-    levelDuration: 10000,
-    donutDelay: 4000,
 
-    levels: {
-  1: { speed: 4.6, spawn: 850 },
-  2: { speed: 6.2, spawn: 560 },
-  3: { speed: 7.4, spawn: 520 },
-  4: { speed: 8.6, spawn: 490 },
-  5: { speed: 10.2, spawn: 470 },
-  6: { speed: 4.0, spawn: 9999 } // финал: без спавна
-}
+    levels: [
+      { speed: 3.2, duration: 10000, bg: "bg1" }, // lvl 1
+      { speed: 3.8, duration: 10000, bg: "bg2" }, // lvl 2
+      { speed: 4.4, duration: 10000, bg: "bg3" }, // lvl 3
+      { speed: 4.9, duration: 10000, bg: "bg4" }, // lvl 4 (чуть легче)
+      { speed: 6.2, duration: 15000, bg: "bg5" }, // lvl 5 (жесткий)
+      { speed: 0,   duration: 4000,  bg: "bg5" }  // lvl 6 (финал)
+    ],
+
+    spawnBase: 900, // будет делиться на 1.5
+    itemSize: 140,
+    carSize: 120
   };
 
   const W = window.innerWidth;
   const H = window.innerHeight;
 
   let state;
+  let sceneRef;
+
+  /* ================== PHASER ================== */
 
   const scene = { preload, create, update };
 
@@ -32,145 +37,119 @@ console.log("GAME.JS LOADED v4");
     width: W,
     height: H,
     parent: "game",
-    backgroundColor: "#0d0014",
+    backgroundColor: "#000",
     scene
   });
 
-  /* ================= PRELOAD ================= */
+  /* ================== PRELOAD ================== */
 
   function preload() {
+    // BG
     for (let i = 1; i <= 5; i++) {
-      this.load.image(`bglvl${i}`, `assets/bg/bglvl${i}.jpg`);
+      this.load.image(`bg${i}`, `assets/bg/bglvl${i}.jpg`);
     }
+
+    // Player
+    this.load.image("car", "assets/car.png");
+
+    // Items
+    this.load.image("cherry", "assets/items/cherry.png");
+    this.load.image("strawberry", "assets/items/strawberry.png");
+    this.load.image("plus300", "assets/items/plus300.png");
+
+    this.load.image("poop", "assets/items/poop.png");
+    this.load.image("bomb", "assets/items/bomb.png");
+    this.load.image("minus300", "assets/items/minus300.png");
+
+    this.load.image("shield", "assets/items/shield.png");
+    this.load.image("donut", "assets/items/donut.png");
   }
 
-  /* ================= CREATE ================= */
+  /* ================== CREATE ================== */
 
   function create() {
+    sceneRef = this;
 
     state = {
-      mode: "rules", // rules | play | transition | win | gameover
-      level: 1,
-      timer: 0,
-      spawnTimer: 0,
-
-      speed: CONFIG.levels[1].speed,
-      spawnGap: CONFIG.levels[1].spawn,
-
-      lanesX: [],
+      mode: "idle", // idle | play | finish
       lane: 1,
-
+      lanesX: [],
       items: [],
+      timer: 0,
+      levelTime: 0,
+      level: 0,
+      speed: CONFIG.levels[0].speed,
+
       score: 0,
       lives: 3,
 
-      lifeUsed: false,
+      shield: false,
       shieldUsed: 0,
-      shield: false
+      lifeBonusUsed: false,
+
+      spawnTimer: 0
     };
 
-    /* ---------- BG ---------- */
+    // BG
+    state.bg = this.add.image(W / 2, H / 2, "bg1")
+      .setDisplaySize(W, H)
+      .setAlpha(0);
 
-    this.bg = this.add.image(W/2, H/2, "bglvl1")
-      .setDisplaySize(W, H);
+    this.tweens.add({
+      targets: state.bg,
+      alpha: 1,
+      duration: 800
+    });
 
-    /* ---------- LANES ---------- */
-
-    const roadWidth = Math.min(W * 0.65, 560);
+    // ROAD LANES (логика)
+    const roadWidth = Math.min(W * 0.65, 520);
     const laneW = roadWidth / CONFIG.lanes;
     const roadX = W / 2;
 
     for (let i = 0; i < CONFIG.lanes; i++) {
       state.lanesX.push(
-        roadX - roadWidth/2 + laneW/2 + laneW * i
+        roadX - roadWidth / 2 + laneW / 2 + laneW * i
       );
     }
 
-    /* ---------- PLAYER ---------- */
+    // PLAYER
+    state.player = this.add.image(
+      state.lanesX[state.lane],
+      H - 140,
+      "car"
+    ).setDisplaySize(CONFIG.carSize, CONFIG.carSize);
 
-    state.player = this.add.text(
-  state.lanesX[state.lane],
-  H - 135,
-  "🚗",
-  {
-    fontFamily: "Press Start 2P",
-    fontSize: "96px"
-  }
-).setOrigin(0.5);
-
-// небольшая тень, чтобы “вес” был
-state.player.setShadow(0, 6, "#000", 10, true, true);
-
-state.shieldAura = this.add.text(
-  state.player.x,
-  state.player.y,
-  "🟦",
-  { fontSize: "150px" }
-).setOrigin(0.5).setAlpha(0);
-
-state.shieldAura.setBlendMode(Phaser.BlendModes.ADD);
-
-    /* ---------- UI ---------- */
-
+    // UI
     state.scoreText = this.add.text(16, 16, "0", {
-      fontFamily: "Press Start 2P",
-      fontSize: "14px",
+      fontFamily: "Arial",
+      fontSize: "22px",
       color: "#fff"
     });
 
-    state.livesText = this.add.text(16, 40, "❤️❤️❤️", {
-      fontFamily: "Press Start 2P",
-      fontSize: "14px"
+    state.livesText = this.add.text(16, 44, "❤️❤️❤️", {
+      fontSize: "20px"
     });
 
-    state.levelText = this.add.text(16, 64, "LVL 1", {
-      fontFamily: "Press Start 2P",
-      fontSize: "12px",
+    state.levelText = this.add.text(16, 70, "LVL 1", {
+      fontSize: "14px",
       color: "#aaa"
     });
 
-    /* ---------- RULES ---------- */
-    
-    state.rulesBox = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.82);
-
-state.rules = this.add.text(
-  W/2, H/2,
-  "ПРАВИЛА\n\n" +
-  "🍒  +100     🍓  +200\n" +
-  "💩  -100     💣  -200\n" +
-  "💀  -1 жизнь (если нет щита)\n" +
-  "❤️  +1 жизнь (1 раз за игру)\n" +
-  "🛡  Щит 4 сек (2 раза за игру)\n\n" +
-  "СВАЙП ← →  |  ТАП — СТАРТ",
-  {
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
-    fontSize: "18px",
-    align: "center",
-    color: "#ffffff",
-    lineSpacing: 10
-  }
-).setOrigin(0.5);
-
-state.rules.setShadow(0, 2, "#000", 8, true, true);
-
-    /* ---------- INPUT ---------- */
+    const hint = this.add.text(
+      W / 2,
+      H / 2,
+      "ТАП — СТАРТ\nСВАЙП ← →",
+      { fontSize: "20px", color: "#fff", align: "center" }
+    ).setOrigin(0.5);
 
     let startX = 0;
 
     this.input.on("pointerdown", p => {
-
-      if (state.mode === "rules") {
+      if (state.mode === "idle") {
         state.mode = "play";
-        state.rules.destroy();
-        state.rulesBox.destroy();
+        hint.destroy();
         return;
       }
-
-      if (state.mode === "gameover" || state.mode === "win") {
-        this.scene.restart();
-        return;
-      }
-
       startX = p.x;
     });
 
@@ -190,215 +169,194 @@ state.rules.setShadow(0, 2, "#000", 8, true, true);
     });
   }
 
-  /* ================= UPDATE ================= */
+  /* ================== UPDATE ================== */
 
   function update(_, delta) {
     if (state.mode !== "play") return;
 
-    // щит следует за машиной
-state.shieldAura.x = state.player.x;
-state.shieldAura.y = state.player.y;
-
-if (state.shield) {
-  state.shieldAura.setAlpha(0.35);
-} else {
-  state.shieldAura.setAlpha(0);
-}
-
-    state.timer += delta;
+    state.levelTime += delta;
     state.spawnTimer += delta;
 
-    if (state.level < 6 && state.timer >= CONFIG.levelDuration) {
-      nextLevel(this);
-    }
+    const levelCfg = CONFIG.levels[state.level];
 
-    if (state.spawnTimer >= state.spawnGap) {
+    // SPAWN ITEMS
+    const spawnDelay = CONFIG.spawnBase / 1.5;
+    if (state.spawnTimer > spawnDelay && state.level < 5) {
       state.spawnTimer = 0;
-      spawnItem(this);
+      spawnItem(sceneRef);
     }
 
+    // MOVE ITEMS
     for (let i = state.items.length - 1; i >= 0; i--) {
       const it = state.items[i];
       it.y += state.speed;
 
       if (
-        Math.abs(it.y - state.player.y) < 28 &&
+        Math.abs(it.y - state.player.y) < 60 &&
         it.lane === state.lane
       ) {
-        handleHit(this, it);
+        handleItem(it);
         it.destroy();
         state.items.splice(i, 1);
         continue;
       }
 
-      if (it.y > H + 80) {
+      if (it.y > H + 100) {
         it.destroy();
         state.items.splice(i, 1);
       }
     }
+
+    // LEVEL END
+    if (state.levelTime > levelCfg.duration) {
+      nextLevel(sceneRef);
+    }
   }
 
-  /* ================= ITEMS ================= */
+  /* ================== ITEMS ================== */
 
   function spawnItem(scene) {
+    const pool = [
+      "cherry",
+      "strawberry",
+      "poop",
+      "bomb",
+      "plus300",
+      "minus300"
+    ];
 
+    if (state.shieldUsed < 2 && Math.random() < 0.08) pool.push("shield");
+
+    const type = Phaser.Utils.Array.GetRandom(pool);
     const lane = Phaser.Math.Between(0, CONFIG.lanes - 1);
 
-    let emoji = "🍒";
-
-    const r = Math.random();
-
-    if (r < 0.12) emoji = "💀";
-    else if (r < 0.25) emoji = "💣";
-    else if (r < 0.4) emoji = "💩";
-    else if (r < 0.6) emoji = "🍓";
-
-    if (!state.lifeUsed && Math.random() < 0.04) emoji = "❤️";
-    if (state.shieldUsed < 2 && Math.random() < 0.05) emoji = "🛡";
-
-    const t = scene.add.text(
+    const item = scene.add.image(
       state.lanesX[lane],
-      -40,
-      emoji,
-      {
-        fontFamily: "Press Start 2P",
-        fontSize: "78px"
-      }
-    ).setOrigin(0.5);
+      -100,
+      type
+    ).setDisplaySize(CONFIG.itemSize, CONFIG.itemSize);
 
-    t.lane = lane;
-    t.emoji = emoji;
+    item.type = type;
+    item.lane = lane;
 
-    state.items.push(t);
+    state.items.push(item);
   }
 
-  /* ================= HIT ================= */
-
-  function handleHit(scene, it) {
-
-    const e = it.emoji;
-
-    if (e === "🍒") state.score += 100;
-    if (e === "🍓") state.score += 200;
-    if (e === "💩") state.score -= 100;
-    if (e === "💣") state.score -= 200;
-
-    if (e === "💀" && !state.shield) {
-      state.lives--;
+  function handleItem(item) {
+    if (item.type === "shield") {
+      activateShield();
+      return;
     }
 
-    if (e === "❤️" && !state.lifeUsed) {
-      state.lifeUsed = true;
-      state.lives++;
-    }
+    if (item.type === "cherry") state.score += 100;
+    if (item.type === "strawberry") state.score += 200;
+    if (item.type === "plus300") state.score += 300;
 
-    if (e === "🛡" && state.shieldUsed < 2) {
-      state.shield = true;
-      scene.tweens.add({
-  targets: state.shieldAura,
-  alpha: { from: 0.0, to: 0.45 },
-  duration: 200,
-  yoyo: true,
-  repeat: 1
-});
-
-      state.shieldUsed++;
-      scene.time.delayedCall(4000, () => state.shield = false);
-    }
-
-    if (state.lives <= 0) {
-      gameOver(scene);
-    }
+    if (item.type === "poop") damage(1);
+    if (item.type === "bomb") damage(2);
+    if (item.type === "minus300") damage(3);
 
     state.scoreText.setText(state.score);
-    state.livesText.setText("❤️".repeat(state.lives));
   }
 
-  /* ================= LEVEL ================= */
+  function damage(d) {
+    if (state.shield) return;
 
-  function nextLevel(scene) {
+    state.lives -= d;
+    state.lives = Math.max(0, state.lives);
+    state.livesText.setText("❤️".repeat(state.lives));
 
-    state.mode = "transition";
-    state.level++;
-    state.timer = 0;
+    if (state.lives <= 0) {
+      endGame();
+    }
+  }
 
-    for (const it of state.items) it.destroy();
-    state.items.length = 0;
+  function activateShield() {
+    if (state.shieldUsed >= 2) return;
 
-    scene.cameras.main.fadeOut(400);
+    state.shield = true;
+    state.shieldUsed++;
 
-    scene.time.delayedCall(500, () => {
+    state.player.setTint(0x00ffff);
 
-      if (state.level <= 5) {
-        scene.bg.setTexture(`bglvl${state.level}`);
-      }
-
-      state.speed = CONFIG.levels[state.level].speed;
-      state.spawnGap = CONFIG.levels[state.level].spawn;
-
-      state.levelText.setText("LVL " + state.level);
-
-      scene.cameras.main.fadeIn(400);
-
-      state.mode = "play";
-
-      if (state.level === 6) {
-        scene.time.delayedCall(CONFIG.donutDelay, () => spawnDonut(scene));
-      }
+    sceneRef.time.delayedCall(4000, () => {
+      state.shield = false;
+      state.player.clearTint();
     });
   }
 
-  /* ================= DONUT ================= */
+  /* ================== LEVEL FLOW ================== */
 
-  function spawnDonut(scene) {
+  function nextLevel(scene) {
+    state.level++;
+    state.levelTime = 0;
+    state.spawnTimer = 0;
+    state.items.forEach(i => i.destroy());
+    state.items = [];
 
-    const donut = scene.add.text(
-      W/2,
-      -120,
-      "🍩",
-      {
-        fontFamily: "Press Start 2P",
-        fontSize: "120px"
+    if (state.level >= CONFIG.levels.length) return;
+
+    const cfg = CONFIG.levels[state.level];
+    state.speed = cfg.speed;
+    state.levelText.setText(`LVL ${state.level + 1}`);
+
+    scene.tweens.add({
+      targets: state.bg,
+      alpha: 0,
+      duration: 400,
+      onComplete: () => {
+        state.bg.setTexture(cfg.bg);
+        scene.tweens.add({
+          targets: state.bg,
+          alpha: 1,
+          duration: 600
+        });
       }
-    ).setOrigin(0.5);
+    });
+
+    if (state.level === 5) {
+      scene.time.delayedCall(4000, () => showDonut(scene));
+    }
+  }
+
+  /* ================== FINISH ================== */
+
+  function showDonut(scene) {
+    state.mode = "finish";
+
+    const donut = scene.add.image(
+      W / 2,
+      -200,
+      "donut"
+    ).setDisplaySize(220, 220);
 
     scene.tweens.add({
       targets: donut,
-      y: H/2,
+      y: H / 2,
       duration: 3000,
-      ease: "Sine.easeOut",
-      onComplete: () => win(scene)
+      ease: "Sine.easeOut"
+    });
+
+    scene.time.delayedCall(3500, () => {
+      scene.add.text(
+        W / 2,
+        H / 2 + 160,
+        "ПОЗДРАВЛЯЮ 🎉",
+        {
+          fontSize: "28px",
+          color: "#fff"
+        }
+      ).setOrigin(0.5);
     });
   }
 
-  /* ================= END ================= */
-
-  function gameOver(scene) {
-    state.mode = "gameover";
-
-    scene.add.text(
-      W/2, H/2,
-      "GAME OVER",
-      {
-        fontFamily: "Press Start 2P",
-        fontSize: "130px",
-        color: "#ff4d6d"
-      }
-    ).setOrigin(0.5);
-  }
-
-  function win(scene) {
-    state.mode = "win";
-
-    scene.add.text(
-      W/2,
-      H/2 + 140,
-      "ПОЗДРАВЛЯЮ",
-      {
-        fontFamily: "Press Start 2P",
-        fontSize: "22px",
-        color: "#fff"
-      }
+  function endGame() {
+    state.mode = "finish";
+    sceneRef.add.text(
+      W / 2,
+      H / 2,
+      "ИГРА ОКОНЧЕНА",
+      { fontSize: "26px", color: "#ff4d6d" }
     ).setOrigin(0.5);
   }
 
