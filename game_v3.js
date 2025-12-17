@@ -5,11 +5,10 @@ console.log("GAME.JS LOADED v3");
 
   const CONFIG = {
     lanes: 3,
-    speed: 5,
-    spawnGap: 900,
-    colors: {
-      bg: 0x0d0014
-    }
+    baseSpeed: 4,
+    baseSpawnGap: 900,
+    levelUpScore: 8, // сколько очков на уровень
+    maxLevel: 5
   };
 
   const W = window.innerWidth;
@@ -30,10 +29,9 @@ console.log("GAME.JS LOADED v3");
 
   // ---------- PRELOAD ----------
   function preload() {
-    this.load.image("bg", "assets/bg/bg1.png");
-    this.load.image("road", "assets/road/road1.png");
-    this.load.image("borderL", "assets/border/border_left.png");
-    this.load.image("borderR", "assets/border/border_right.png");
+    for (let i = 1; i <= CONFIG.maxLevel; i++) {
+      this.load.image(`bglvl${i}`, `assets/bg/bglvl${i}.jpg`);
+    }
   }
 
   // ---------- CREATE ----------
@@ -45,42 +43,29 @@ console.log("GAME.JS LOADED v3");
       lanesX: [],
       items: [],
       timer: 0,
-      score: 0
+      score: 0,
+      level: 1,
+      speed: CONFIG.baseSpeed,
+      spawnGap: CONFIG.baseSpawnGap,
+      bg: null
     };
 
-    // BACKGROUND FILL (убирает шахматку)
-    this.add.rectangle(W/2, H/2, W, H, CONFIG.colors.bg);
-
-    // BG IMAGE
-    this.add.image(W/2, H/2, "bg")
+    // фон
+    state.bg = this.add.image(W / 2, H / 2, "bglvl1")
       .setDisplaySize(W, H);
 
-    // ROAD
-    const road = this.add.image(W/2, H/2, "road");
-    road.setDisplaySize(Math.min(W * 0.6, 520), H + 200);
+    // полосы движения (логические)
+    const roadWidth = W * 0.6;
+    const laneW = roadWidth / CONFIG.lanes;
+    const roadX = W / 2;
 
-    // BORDERS
-    this.add.image(
-      road.x - road.displayWidth/2 - 20,
-      H/2,
-      "borderL"
-    ).setDisplaySize(40, H + 200);
-
-    this.add.image(
-      road.x + road.displayWidth/2 + 20,
-      H/2,
-      "borderR"
-    ).setDisplaySize(40, H + 200);
-
-    // LANES
-    const laneW = road.displayWidth / CONFIG.lanes;
     for (let i = 0; i < CONFIG.lanes; i++) {
       state.lanesX.push(
-        road.x - road.displayWidth/2 + laneW/2 + laneW * i
+        roadX - roadWidth / 2 + laneW / 2 + laneW * i
       );
     }
 
-    // PLAYER
+    // игрок
     state.player = this.add.text(
       state.lanesX[state.lane],
       H - 120,
@@ -100,7 +85,7 @@ console.log("GAME.JS LOADED v3");
     });
 
     const hint = this.add.text(
-      W/2, H/2,
+      W / 2, H / 2,
       "ТАП — СТАРТ\nСВАЙП ← →",
       { fontSize: "18px", color: "#fff", align: "center" }
     ).setOrigin(0.5);
@@ -108,7 +93,6 @@ console.log("GAME.JS LOADED v3");
     let startX = 0;
 
     this.input.on("pointerdown", p => {
-
       if (state.mode === "idle") {
         state.mode = "play";
         hint.destroy();
@@ -145,7 +129,7 @@ console.log("GAME.JS LOADED v3");
 
     state.timer += delta;
 
-    if (state.timer > CONFIG.spawnGap) {
+    if (state.timer > state.spawnGap) {
       state.timer = 0;
       spawnGap(this);
     }
@@ -155,10 +139,11 @@ console.log("GAME.JS LOADED v3");
       it.y += it.speed;
 
       if (
-        Math.abs(it.y - state.player.y) < 30 &&
+        Math.abs(it.y - state.player.y) < 32 &&
         it.lane === state.lane
       ) {
         gameOver(this);
+        return;
       }
 
       if (it.y > H + 80) {
@@ -166,6 +151,8 @@ console.log("GAME.JS LOADED v3");
         state.items.splice(i, 1);
         state.score++;
         state.scoreText.setText(state.score);
+
+        checkLevelUp(this);
       }
     }
   }
@@ -177,15 +164,33 @@ console.log("GAME.JS LOADED v3");
     const gap = scene.add.rectangle(
       state.lanesX[lane],
       -60,
-      60,
-      60,
+      70,
+      70,
       0x000000
     );
 
     gap.lane = lane;
-    gap.speed = CONFIG.speed;
+    gap.speed = state.speed;
 
     state.items.push(gap);
+  }
+
+  // ---------- LEVEL UP ----------
+  function checkLevelUp(scene) {
+    const newLevel =
+      Math.floor(state.score / CONFIG.levelUpScore) + 1;
+
+    if (newLevel > state.level && newLevel <= CONFIG.maxLevel) {
+      state.level = newLevel;
+      state.levelText.setText(`lvl ${state.level}`);
+
+      // смена фона
+      state.bg.setTexture(`bglvl${state.level}`);
+
+      // усложнение
+      state.speed += 0.8;
+      state.spawnGap = Math.max(400, state.spawnGap - 100);
+    }
   }
 
   // ---------- GAME OVER ----------
@@ -195,8 +200,8 @@ console.log("GAME.JS LOADED v3");
     state.mode = "gameover";
 
     scene.add.text(
-      W/2,
-      H/2,
+      W / 2,
+      H / 2,
       "GAME OVER\nобрыв дороги\n\nТАП — ЗАНОВО",
       {
         fontSize: "22px",
