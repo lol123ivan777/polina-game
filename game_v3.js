@@ -1,3 +1,11 @@
+const tg = window.Telegram?.WebApp;
+
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.disableVerticalSwipes(); // чтобы не свайпался Telegram
+}
+
 document.title = "PolinaBibi v3";
 console.log("GAME.JS LOADED v3 — 4 LANES");
 
