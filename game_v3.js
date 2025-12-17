@@ -1,22 +1,22 @@
 document.title = "PolinaBibi v3";
-console.log("GAME.JS CLEAN BUILD v3");
+console.log("GAME.JS FINAL BUILD v3");
 
 (() => {
 
   const CONFIG = {
     lanes: 4,
-    spawnBase: 900,
-    itemSize: 80,
-    carSize: 56,
+    spawnBase: 700,
+    itemSize: 48,
+    carSize: 52,
 
     levels: [
-      { speed: 3.2, duration: 10000, bg: "bg1" },
-      { speed: 3.8, duration: 10000, bg: "bg2" },
-      { speed: 4.4, duration: 10000, bg: "bg3" },
-      { speed: 4.9, duration: 10000, bg: "bg4" },
-      { speed: 6.2, duration: 15000, bg: "bg5" },
-      { speed: 0,   duration: 4000,  bg: "bg5" } // финальный с пончиком
-    ],
+      { speed: 4.2, duration: 10000, bg: "bg1" },
+      { speed: 5.0, duration: 10000, bg: "bg2" },
+      { speed: 5.8, duration: 10000, bg: "bg3" },
+      { speed: 6.6, duration: 10000, bg: "bg4" },
+      { speed: 8.0, duration: 15000, bg: "bg5" },
+      { speed: 0,   duration: 4000,  bg: "bg5" } // финал
+    ]
   };
 
   const W = window.innerWidth;
@@ -36,25 +36,25 @@ console.log("GAME.JS CLEAN BUILD v3");
     scene
   });
 
-  /* ---------- PRELOAD ---------- */
+  /* ================= PRELOAD ================= */
+
   function preload() {
     for (let i = 1; i <= 5; i++) {
       this.load.image(`bg${i}`, `assets/bg/bglvl${i}.jpg`);
     }
-    this.load.image("car", "assets/car.png");
 
-    // предметы
     this.load.image("cherry", "assets/items/cherry.png");
     this.load.image("strawberry", "assets/items/strawberry.png");
-    this.load.image("plus300", "assets/items/plus300.png");
+    this.load.image("pineapple", "assets/items/pineapple.png");
     this.load.image("poop", "assets/items/poop.png");
     this.load.image("bomb", "assets/items/bomb.png");
-    this.load.image("minus300", "assets/items/minus300.png");
-    this.load.image("shield", "assets/items/shield.png");
+    this.load.image("skull", "assets/items/skull.png");
+    this.load.image("eye", "assets/items/eye.png");
     this.load.image("donut", "assets/items/donut.png");
   }
 
-  /* ---------- CREATE ---------- */
+  /* ================= CREATE ================= */
+
   function create() {
     sceneRef = this;
 
@@ -63,48 +63,78 @@ console.log("GAME.JS CLEAN BUILD v3");
       lane: 1,
       lanesX: [],
       items: [],
-      timer: 0,
-      levelTime: 0,
       level: 0,
+      levelTime: 0,
+      spawnTimer: 0,
       speed: CONFIG.levels[0].speed,
       score: 0,
       lives: 3,
       shield: false,
       shieldUsed: 0,
-      spawnTimer: 0
+      lastItem: null
     };
 
-    // фон
-    state.bg = this.add.image(W / 2, H / 2, "bg1").setDisplaySize(W, H).setAlpha(0);
+    // BG
+    state.bg = this.add.image(W / 2, H / 2, "bg1")
+      .setDisplaySize(W, H)
+      .setAlpha(0);
+
     this.tweens.add({ targets: state.bg, alpha: 1, duration: 800 });
 
-    // полосы
+    // Road lanes
     const roadWidth = Math.min(W * 0.65, 520);
     const laneW = roadWidth / CONFIG.lanes;
-    const roadX = W / 2;
+    const cx = W / 2;
 
     for (let i = 0; i < CONFIG.lanes; i++) {
-      state.lanesX.push(roadX - roadWidth / 2 + laneW / 2 + laneW * i);
+      state.lanesX.push(cx - roadWidth / 2 + laneW / 2 + laneW * i);
     }
 
-    // машинка
-    state.player = this.add.text(state.lanesX[state.lane], H - 140, "🚗", { fontSize: "52px" }).setOrigin(0.5);
+    // Player
+    state.player = this.add.text(
+      state.lanesX[state.lane],
+      H - 130,
+      "🚗",
+      { fontSize: `${CONFIG.carSize}px` }
+    ).setOrigin(0.5);
 
-    // интерфейс
-    state.scoreText = this.add.text(16, 16, "0", { fontFamily: "Arial", fontSize: "22px", color: "#fff" });
-    state.livesText = this.add.text(16, 44, "❤️❤️❤️", { fontSize: "20px" });
-    state.levelText = this.add.text(16, 70, "LVL 1", { fontSize: "14px", color: "#aaa" });
+    // UI
+    state.scoreText = this.add.text(16, 16, "0", {
+      fontSize: "22px",
+      color: "#fff",
+      fontFamily: "Arial"
+    });
 
-    const hint = this.add.text(W / 2, H / 2, "ТАП — СТАРТ\nСВАЙП ← →", {
-      fontSize: "20px", color: "#fff", align: "center"
-    }).setOrigin(0.5);
+    state.livesText = this.add.text(16, 44, "❤️❤️❤️", {
+      fontSize: "20px"
+    });
+
+    state.levelText = this.add.text(16, 70, "LVL 1", {
+      fontSize: "14px",
+      color: "#aaa"
+    });
+
+    // Rules screen
+    const rules = this.add.text(
+      W / 2,
+      H / 2,
+      "ПРАВИЛА\n\n" +
+      "🍒 +100\n🍓 +200\n🍍 +300\n\n" +
+      "💩 -100\n💣 -200\n☠️ -300\n\n" +
+      "🧿 ЩИТ (4 сек)\n\nТАП — НАЧАТЬ",
+      {
+        fontSize: "20px",
+        color: "#fff",
+        align: "center"
+      }
+    ).setOrigin(0.5);
 
     let startX = 0;
 
     this.input.on("pointerdown", p => {
       if (state.mode === "idle") {
         state.mode = "play";
-        hint.destroy();
+        rules.destroy();
         return;
       }
       startX = p.x;
@@ -114,22 +144,25 @@ console.log("GAME.JS CLEAN BUILD v3");
       if (state.mode !== "play") return;
       const dx = p.x - startX;
       if (Math.abs(dx) < 40) return;
-      state.lane = Phaser.Math.Clamp(state.lane + (dx > 0 ? 1 : -1), 0, CONFIG.lanes - 1);
+
+      state.lane = Phaser.Math.Clamp(
+        state.lane + (dx > 0 ? 1 : -1),
+        0,
+        CONFIG.lanes - 1
+      );
       state.player.x = state.lanesX[state.lane];
     });
   }
 
-  /* ---------- UPDATE ---------- */
+  /* ================= UPDATE ================= */
+
   function update(_, delta) {
     if (state.mode !== "play") return;
 
     state.levelTime += delta;
     state.spawnTimer += delta;
-    const levelCfg = CONFIG.levels[state.level];
 
-    // предметы
-    const spawnDelay = CONFIG.spawnBase / 1.5;
-    if (state.spawnTimer > spawnDelay && state.level < 5) {
+    if (state.spawnTimer > CONFIG.spawnBase && state.level < 5) {
       state.spawnTimer = 0;
       spawnItem(sceneRef);
     }
@@ -145,23 +178,47 @@ console.log("GAME.JS CLEAN BUILD v3");
         continue;
       }
 
-      if (it.y > H + 100) {
+      if (it.y > H + 80) {
         it.destroy();
         state.items.splice(i, 1);
       }
     }
 
-    if (state.levelTime > levelCfg.duration) nextLevel(sceneRef);
+    if (state.levelTime > CONFIG.levels[state.level].duration) {
+      nextLevel(sceneRef);
+    }
   }
 
-  /* ---------- ITEM LOGIC ---------- */
-  function spawnItem(scene) {
-    const pool = ["cherry", "strawberry", "plus300", "poop", "bomb", "minus300"];
-    if (state.shieldUsed < 2 && Math.random() < 0.1) pool.push("shield");
+  /* ================= ITEMS ================= */
 
-    const type = Phaser.Utils.Array.GetRandom(pool);
+  function spawnItem(scene) {
+    const weighted = [
+      "cherry","cherry","cherry",
+      "strawberry","strawberry",
+      "pineapple",
+      "poop","poop",
+      "bomb",
+      "skull"
+    ];
+
+    if (state.shieldUsed < 2 && Math.random() < 0.15) {
+      weighted.push("eye");
+    }
+
+    let type;
+    do {
+      type = Phaser.Utils.Array.GetRandom(weighted);
+    } while (type === state.lastItem && Math.random() < 0.7);
+
+    state.lastItem = type;
+
     const lane = Phaser.Math.Between(0, CONFIG.lanes - 1);
-    const item = scene.add.image(state.lanesX[lane], -100, type).setDisplaySize(CONFIG.itemSize, CONFIG.itemSize);
+
+    const item = scene.add.image(
+      state.lanesX[lane],
+      -60,
+      type
+    ).setDisplaySize(CONFIG.itemSize, CONFIG.itemSize);
 
     item.type = type;
     item.lane = lane;
@@ -169,14 +226,15 @@ console.log("GAME.JS CLEAN BUILD v3");
   }
 
   function handleItem(item) {
-    if (item.type === "shield") return activateShield();
+    if (item.type === "eye") return activateShield();
 
     if (item.type === "cherry") state.score += 100;
     if (item.type === "strawberry") state.score += 200;
-    if (item.type === "plus300") state.score += 300;
+    if (item.type === "pineapple") state.score += 300;
+
     if (item.type === "poop") damage(1);
     if (item.type === "bomb") damage(2);
-    if (item.type === "minus300") damage(3);
+    if (item.type === "skull") damage(3);
 
     state.scoreText.setText(state.score);
   }
@@ -194,13 +252,15 @@ console.log("GAME.JS CLEAN BUILD v3");
     state.shield = true;
     state.shieldUsed++;
     state.player.setTint(0x00ffff);
+
     sceneRef.time.delayedCall(4000, () => {
       state.shield = false;
       state.player.clearTint();
     });
   }
 
-  /* ---------- LEVEL FLOW ---------- */
+  /* ================= LEVEL FLOW ================= */
+
   function nextLevel(scene) {
     state.level++;
     if (state.level >= CONFIG.levels.length) return;
@@ -229,19 +289,34 @@ console.log("GAME.JS CLEAN BUILD v3");
     }
   }
 
-  /* ---------- FINISH ---------- */
   function showDonut(scene) {
     state.mode = "finish";
     const donut = scene.add.image(W / 2, -200, "donut").setDisplaySize(220, 220);
-    scene.tweens.add({ targets: donut, y: H / 2, duration: 3000, ease: "Sine.easeOut" });
-    scene.time.delayedCall(3500, () => {
-      scene.add.text(W / 2, H / 2 + 160, "ПОЗДРАВЛЯЮ 🎉", { fontSize: "28px", color: "#fff" }).setOrigin(0.5);
+    scene.tweens.add({
+      targets: donut,
+      y: H / 2,
+      duration: 2800,
+      ease: "Sine.easeOut"
+    });
+
+    scene.time.delayedCall(3200, () => {
+      scene.add.text(
+        W / 2,
+        H / 2 + 160,
+        "ПОЗДРАВЛЯЮ 🎉",
+        { fontSize: "28px", color: "#fff" }
+      ).setOrigin(0.5);
     });
   }
 
   function endGame() {
     state.mode = "finish";
-    sceneRef.add.text(W / 2, H / 2, "ИГРА ОКОНЧЕНА", { fontSize: "26px", color: "#ff4d6d" }).setOrigin(0.5);
+    sceneRef.add.text(
+      W / 2,
+      H / 2,
+      "ИГРА ОКОНЧЕНА",
+      { fontSize: "26px", color: "#ff4d6d" }
+    ).setOrigin(0.5);
   }
 
 })();
