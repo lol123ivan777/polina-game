@@ -1,23 +1,28 @@
-.import { CONFIG } from "./config.js";
-
 export function createPlayer(scene, state) {
-  const y = CONFIG.height - CONFIG.player.yOffset;
+  const y = scene.scale.height - 120;
 
   const player = scene.add.text(
     state.lanesX[state.lane],
     y,
-    CONFIG.player.emoji,
+    "🚗",
     { fontSize: "42px" }
   ).setOrigin(0.5);
+
+  // glow
+  player.glow = scene.add.text(
+    player.x,
+    player.y,
+    "🚗",
+    { fontSize: "42px", color: "#ff2b8f" }
+  ).setOrigin(0.5).setAlpha(0.3);
 
   return player;
 }
 
 export function movePlayer(state, dir) {
-  state.lane = Phaser.Math.Clamp(
-    state.lane + dir,
-    0,
-    CONFIG.lanes - 1
-  );
+  state.lane += dir;
+  state.lane = Phaser.Math.Clamp(state.lane, 0, state.lanesX.length - 1);
+
   state.player.x = state.lanesX[state.lane];
+  state.player.glow.x = state.player.x;
 }
