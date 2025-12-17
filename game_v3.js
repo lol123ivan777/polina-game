@@ -18,8 +18,8 @@ console.log("GAME.JS LOADED v3");
     ],
 
     spawnBase: 900, // будет делиться на 1.5
-    itemSize: 140,
-    carSize: 120
+    itemSize: 72,
+    carSize: 52
   };
 
   const W = window.innerWidth;
