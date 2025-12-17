@@ -13,9 +13,9 @@ const scene = {
 
 new Phaser.Game({
   type: Phaser.AUTO,
+  parent: "game",
   width: CONFIG.width,
   height: CONFIG.height,
-  parent: "game",
   backgroundColor: CONFIG.colors.bg,
   scene
 });
@@ -28,7 +28,10 @@ function create() {
     lane: 1,
     lanesX: [],
     items: [],
-    started: false
+    spawnTimer: 0,
+    started: false,
+    player: null,
+    ui: null
   };
 
   const laneWidth = CONFIG.width / CONFIG.lanes;
@@ -36,7 +39,7 @@ function create() {
     state.lanesX.push(laneWidth * i + laneWidth / 2);
   }
 
-  // road
+  // ROAD
   this.road = this.add.rectangle(
     CONFIG.width / 2,
     CONFIG.height / 2,
@@ -45,18 +48,19 @@ function create() {
     CONFIG.colors.road
   );
 
-  // player
+  // PLAYER
   state.player = createPlayer(this, state);
 
   // UI
   state.ui = createUI(this, state);
 
-  // input
+  // INPUT
   let startX = 0;
 
   this.input.on("pointerdown", p => {
     if (!state.started) {
       state.started = true;
+      state.ui.hint.destroy();
       return;
     }
     startX = p.x;
@@ -64,8 +68,10 @@ function create() {
 
   this.input.on("pointerup", p => {
     if (!state.started) return;
+
     const dx = p.x - startX;
     if (Math.abs(dx) < 40) return;
+
     movePlayer(state, dx > 0 ? 1 : -1);
   });
 }
