@@ -15,14 +15,15 @@ console.log("GAME.JS LOADED v3 — 4 LANES");
 
   const CONFIG = {
     lanes: 4,
-    levelDuration: 10000, // 10 сек
+    levelDurationDefault: 10000,
+    levelDurationLevel5: 15000,
     maxLevel: 5,
 
     levels: {
-      1: { speed: 4,  spawn: 900 },
-      2: { speed: 6,  spawn: 750 },
-      3: { speed: 8,  spawn: 600 },
-      4: { speed: 11, spawn: 480 },
+      1: { speed: 4,  spawn: 800 },
+      2: { speed: 6,  spawn: 690 },
+      3: { speed: 8,  spawn: 550 },
+      4: { speed: 10, spawn: 420 },
       5: { speed: 15, spawn: 350 }, // почти ад
     },
 
@@ -155,12 +156,17 @@ console.log("GAME.JS LOADED v3 — 4 LANES");
   function update(_, delta) {
     if (state.mode !== "play") return;
 
-    // LEVEL TIMER
-    state.levelTimer += delta;
-    if (state.levelTimer >= CONFIG.levelDuration) {
-      state.levelTimer = 0;
-      nextLevel(this);
-    }
+    // LEVEL //
+
+     state.levelTimer += delta;
+
+const levelLimit =
+  state.level === 5 ? CONFIG.levelDurationLevel5 : CONFIG.levelDurationDefault;
+
+if (state.levelTimer >= levelLimit) {
+  state.levelTimer = 0;
+  nextLevel(this);
+}
 
     // SPAWN
     state.spawnTimer += delta;
@@ -212,18 +218,21 @@ console.log("GAME.JS LOADED v3 — 4 LANES");
 
   // ---------- NEXT LEVEL ----------
   function nextLevel(scene) {
-    if (state.level >= CONFIG.maxLevel) return;
-
-    state.level++;
-    const cfg = CONFIG.levels[state.level];
-
-    state.speed = cfg.speed;
-    state.spawnGap = cfg.spawn;
-
-    state.levelText.setText("lvl " + state.level);
-
-    scene.bg.setTexture("bglvl" + state.level);
+  // если уже на 5 и таймер закончился -> победа
+  if (state.level >= CONFIG.maxLevel) {
+    win(scene);
+    return;
   }
+
+  state.level++;
+  const cfg = CONFIG.levels[state.level];
+
+  state.speed = cfg.speed;
+  state.spawnGap = cfg.spawn;
+
+  state.levelText.setText("lvl " + state.level);
+  scene.bg.setTexture("bglvl" + state.level);
+}
 
   // ---------- UTILS ----------
   function weightedRandom(arr) {
@@ -234,5 +243,33 @@ console.log("GAME.JS LOADED v3 — 4 LANES");
     }
     return arr[0];
   }
+
+function win(scene) {
+  if (state.mode !== "play") return;
+
+  state.mode = "win";
+
+  // убираем все предметы
+  for (const it of state.items) it.destroy();
+  state.items.length = 0;
+
+  // большой пончик (да, размер можно любой)
+  const donut = scene.add.text(
+    W / 2,
+    H / 2 - 40,
+    "🍩",
+    { fontSize: "140px" } // огромный
+  ).setOrigin(0.5);
+
+  scene.add.text(
+    W / 2,
+    H / 2 + 90,
+    "ТЫ ПРОШЁЛ(А) 5 УРОВЕНЬ\nИГРА ОКОНЧЕНА\n\nТАП — ЗАНОВО",
+    { fontSize: "20px", color: "#fff", align: "center" }
+  ).setOrigin(0.5);
+
+  // тап -> рестарт
+  scene.input.once("pointerdown", () => scene.scene.restart());
+}
 
 })();
