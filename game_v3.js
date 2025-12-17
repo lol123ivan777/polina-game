@@ -1,19 +1,18 @@
 document.title = "PolinaBibi v3";
-console.log("GAME.JS CLEAN FINAL v3");
+console.log("GAME.JS FINAL BUILD v3");
 
 (() => {
 
   const CONFIG = {
     lanes: 4,
+    spawnBase: 520, // ↑ общая частота
     itemSize: 42,
     carSize: 52,
 
-    spawnBase: 480, // чаще, чем было
-
     levels: [
-      { speed: 4.5, duration: 10000, bg: "bg1" },
-      { speed: 5.5, duration: 10000, bg: "bg2" },
-      { speed: 6.6, duration: 10000, bg: "bg3" },
+      { speed: 4.8, duration: 10000, bg: "bg1" },
+      { speed: 5.8, duration: 10000, bg: "bg2" },
+      { speed: 6.8, duration: 10000, bg: "bg3" },
       { speed: 7.8, duration: 10000, bg: "bg4" },
       { speed: 9.2, duration: 15000, bg: "bg5" },
       { speed: 0,   duration: 4000,  bg: "bg5" } // финал
@@ -44,18 +43,18 @@ console.log("GAME.JS CLEAN FINAL v3");
       this.load.image(`bg${i}`, `assets/bg/bglvl${i}.jpg`);
     }
 
-    // items
-    this.load.image("cherry", "assets/items/cherry.png");
-    this.load.image("strawberry", "assets/items/strawberry.png");
-    this.load.image("pineapple", "assets/items/pineapple.png");
+    this.load.image("rules", "assets/rules/rules.png");
+    this.load.image("start", "assets/start/start.png");
 
-    this.load.image("poop", "assets/items/poop.png");
-    this.load.image("bomb", "assets/items/bomb.png");
-    this.load.image("skull", "assets/items/skull.png");
+    const items = [
+      "cherry","strawberry","pineapple",
+      "poop","bomb","skull",
+      "eye","heart","donut"
+    ];
 
-    this.load.image("eye", "assets/items/eye.png");
-    this.load.image("heart", "assets/items/heart.png");
-    this.load.image("donut", "assets/items/donut.png");
+    items.forEach(i =>
+      this.load.image(i, `assets/items/${i}.png`)
+    );
   }
 
   /* ================= CREATE ================= */
@@ -64,97 +63,94 @@ console.log("GAME.JS CLEAN FINAL v3");
     sceneRef = this;
 
     state = {
-      mode: "idle",
+      mode: "rules",
       lane: 1,
       lanesX: [],
       items: [],
-
       level: 0,
       levelTime: 0,
       spawnTimer: 0,
-
       speed: CONFIG.levels[0].speed,
-
       score: 0,
       lives: 3,
-
       shield: false,
       shieldUsed: 0,
-
       lastItem: null
     };
 
-    // background
+    // RULES SCREEN
+    state.rulesScreen = this.add.image(W/2, H/2, "rules")
+      .setDisplaySize(W, H)
+      .setAlpha(1);
+
+    // START SCREEN
+    state.startScreen = this.add.image(W/2, H/2, "start")
+      .setDisplaySize(W, H)
+      .setAlpha(0);
+
+    // BG (игровой)
     state.bg = this.add.image(W/2, H/2, "bg1")
       .setDisplaySize(W, H)
       .setAlpha(0);
 
-    this.tweens.add({ targets: state.bg, alpha: 1, duration: 800 });
+    // INPUT
+    this.input.on("pointerdown", () => {
+      if (state.mode === "rules") {
+        fade(state.rulesScreen, 0);
+        fade(state.startScreen, 1);
+        state.mode = "start";
+        return;
+      }
 
-    // lanes
+      if (state.mode === "start") {
+        fade(state.startScreen, 0);
+        fade(state.bg, 1);
+        initGame(this);
+        state.mode = "play";
+      }
+    });
+  }
+
+  /* ================= INIT GAME ================= */
+
+  function initGame(scene) {
+
     const roadWidth = Math.min(W * 0.65, 520);
     const laneW = roadWidth / CONFIG.lanes;
     const cx = W / 2;
 
     for (let i = 0; i < CONFIG.lanes; i++) {
-      state.lanesX.push(cx - roadWidth/2 + laneW/2 + laneW * i);
+      state.lanesX.push(cx - roadWidth / 2 + laneW / 2 + laneW * i);
     }
 
-    // player
-    state.player = this.add.text(
+    state.player = scene.add.text(
       state.lanesX[state.lane],
-      H - 130,
+      H - 120,
       "🚗",
       { fontSize: `${CONFIG.carSize}px` }
     ).setOrigin(0.5);
 
-    // UI
-    state.scoreText = this.add.text(16, 16, "0", {
+    state.scoreText = scene.add.text(16, 16, "0", {
       fontSize: "22px",
-      color: "#fff",
-      fontFamily: "Arial"
+      color: "#fff"
     });
 
-    state.livesText = this.add.text(16, 44, "❤️❤️❤️", {
+    state.livesText = scene.add.text(16, 44, "❤️❤️❤️", {
       fontSize: "20px"
     });
 
-    state.levelText = this.add.text(16, 70, "LVL 1", {
+    state.levelText = scene.add.text(16, 70, "LVL 1", {
       fontSize: "14px",
       color: "#aaa"
     });
 
-    // rules screen
-    const rules = this.add.text(
-      W/2,
-      H/2,
-      "ПРАВИЛА\n\n" +
-      "🍒 +100\n🍓 +200\n🍍 +300\n\n" +
-      "💩 -100\n💣 -200\n☠️ -300\n\n" +
-      "🧿 ЩИТ (4 сек)\n❤️ +1 ЖИЗНЬ (1 раз)\n\nТАП — СТАРТ",
-      {
-        fontSize: "20px",
-        color: "#fff",
-        align: "center"
-      }
-    ).setOrigin(0.5);
-
     let startX = 0;
 
-    this.input.on("pointerdown", p => {
-      if (state.mode === "idle") {
-        state.mode = "play";
-        rules.destroy();
-        return;
-      }
-      startX = p.x;
-    });
-
-    this.input.on("pointerup", p => {
+    scene.input.on("pointerdown", p => startX = p.x);
+    scene.input.on("pointerup", p => {
       if (state.mode !== "play") return;
       const dx = p.x - startX;
       if (Math.abs(dx) < 40) return;
-
       state.lane = Phaser.Math.Clamp(
         state.lane + (dx > 0 ? 1 : -1),
         0,
@@ -172,11 +168,7 @@ console.log("GAME.JS CLEAN FINAL v3");
     state.levelTime += delta;
     state.spawnTimer += delta;
 
-    const spawnDelay =
-      CONFIG.spawnBase -
-      state.level * 40; // чаще с каждым уровнем
-
-    if (state.spawnTimer > spawnDelay && state.level < 5) {
+    if (state.spawnTimer > CONFIG.spawnBase && state.level < 5) {
       state.spawnTimer = 0;
       spawnItem(sceneRef);
     }
@@ -185,10 +177,7 @@ console.log("GAME.JS CLEAN FINAL v3");
       const it = state.items[i];
       it.y += state.speed;
 
-      if (
-        Math.abs(it.y - state.player.y) < 55 &&
-        it.lane === state.lane
-      ) {
+      if (Math.abs(it.y - state.player.y) < 55 && it.lane === state.lane) {
         handleItem(it);
         it.destroy();
         state.items.splice(i, 1);
@@ -210,29 +199,21 @@ console.log("GAME.JS CLEAN FINAL v3");
 
   function spawnItem(scene) {
     const weighted = [
-      // плюсы (чаще)
       "cherry","cherry","cherry",
       "strawberry","strawberry","strawberry",
       "pineapple","pineapple",
-
-      // минусы
       "poop","poop",
       "bomb",
       "skull"
     ];
 
-    if (state.shieldUsed < 2 && Math.random() < 0.12) {
-      weighted.push("eye");
-    }
-
-    if (state.lives < 3 && Math.random() < 0.05) {
-      weighted.push("heart");
-    }
+    if (state.shieldUsed < 2 && Math.random() < 0.12) weighted.push("eye");
+    if (Math.random() < 0.06) weighted.push("heart");
 
     let type;
     do {
       type = Phaser.Utils.Array.GetRandom(weighted);
-    } while (type === state.lastItem && Math.random() < 0.7);
+    } while (type === state.lastItem && Math.random() < 0.6);
 
     state.lastItem = type;
 
@@ -250,17 +231,19 @@ console.log("GAME.JS CLEAN FINAL v3");
   }
 
   function handleItem(item) {
-    if (item.type === "eye") return activateShield();
-    if (item.type === "heart") return gainLife();
-
-    if (item.type === "cherry") state.score += 100;
-    if (item.type === "strawberry") state.score += 200;
-    if (item.type === "pineapple") state.score += 300;
-
-    if (item.type === "poop") damage(1);
-    if (item.type === "bomb") damage(2);
-    if (item.type === "skull") damage(3);
-
+    switch (item.type) {
+      case "cherry": state.score += 100; break;
+      case "strawberry": state.score += 200; break;
+      case "pineapple": state.score += 300; break;
+      case "poop": damage(1); break;
+      case "bomb": damage(2); break;
+      case "skull": damage(3); break;
+      case "heart":
+        if (state.lives < 4) state.lives++;
+        state.livesText.setText("❤️".repeat(state.lives));
+        return;
+      case "eye": activateShield(); return;
+    }
     state.scoreText.setText(state.score);
   }
 
@@ -270,13 +253,6 @@ console.log("GAME.JS CLEAN FINAL v3");
     if (state.lives < 0) state.lives = 0;
     state.livesText.setText("❤️".repeat(state.lives));
     if (state.lives <= 0) endGame();
-  }
-
-  function gainLife() {
-    if (state.lives < 4) {
-      state.lives++;
-      state.livesText.setText("❤️".repeat(state.lives));
-    }
   }
 
   function activateShield() {
@@ -299,7 +275,6 @@ console.log("GAME.JS CLEAN FINAL v3");
 
     state.levelTime = 0;
     state.spawnTimer = 0;
-
     state.items.forEach(i => i.destroy());
     state.items = [];
 
@@ -322,42 +297,40 @@ console.log("GAME.JS CLEAN FINAL v3");
     }
   }
 
-  /* ================= FINISH ================= */
-
   function showDonut(scene) {
     state.mode = "finish";
-
-    const donut = scene.add.image(
-      W / 2,
-      -200,
-      "donut"
-    ).setDisplaySize(220, 220);
+    const donut = scene.add.image(W/2, -200, "donut")
+      .setDisplaySize(220, 220);
 
     scene.tweens.add({
       targets: donut,
-      y: H / 2,
+      y: H/2,
       duration: 2800,
       ease: "Sine.easeOut"
     });
 
     scene.time.delayedCall(3200, () => {
-      scene.add.text(
-        W / 2,
-        H / 2 + 160,
-        "ПОЗДРАВЛЯЮ 🎉",
-        { fontSize: "28px", color: "#fff" }
-      ).setOrigin(0.5);
+      scene.add.text(W/2, H/2 + 160, "ПОЗДРАВЛЯЮ 🎉", {
+        fontSize: "28px",
+        color: "#fff"
+      }).setOrigin(0.5);
     });
   }
 
   function endGame() {
     state.mode = "finish";
-    sceneRef.add.text(
-      W / 2,
-      H / 2,
-      "ИГРА ОКОНЧЕНА",
-      { fontSize: "26px", color: "#ff4d6d" }
-    ).setOrigin(0.5);
+    sceneRef.add.text(W/2, H/2, "ИГРА ОКОНЧЕНА", {
+      fontSize: "26px",
+      color: "#ff4d6d"
+    }).setOrigin(0.5);
+  }
+
+  function fade(target, alpha) {
+    sceneRef.tweens.add({
+      targets: target,
+      alpha,
+      duration: 600
+    });
   }
 
 })();
