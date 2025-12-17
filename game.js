@@ -1,3 +1,4 @@
+document.title = "PolinaBibi v2 " + new Date().toLocaleTimeString();
 console.log("GAME.JS LOADED v2", new Date().toISOString());
 
 (() => {
