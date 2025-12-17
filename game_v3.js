@@ -5,16 +5,17 @@ console.log("GAME.JS CLEAN FINAL v3");
 
   const CONFIG = {
     lanes: 4,
-    itemSize: 46,
+    itemSize: 42,
     carSize: 52,
-    spawnDelay: 520,
+
+    spawnBase: 480, // чаще, чем было
 
     levels: [
-      { speed: 4.8, duration: 10000, bg: "bg1" },
-      { speed: 6.0, duration: 10000, bg: "bg2" },
-      { speed: 7.2, duration: 10000, bg: "bg3" },
-      { speed: 8.6, duration: 10000, bg: "bg4" },
-      { speed: 10.5, duration: 15000, bg: "bg5" },
+      { speed: 4.5, duration: 10000, bg: "bg1" },
+      { speed: 5.5, duration: 10000, bg: "bg2" },
+      { speed: 6.6, duration: 10000, bg: "bg3" },
+      { speed: 7.8, duration: 10000, bg: "bg4" },
+      { speed: 9.2, duration: 15000, bg: "bg5" },
       { speed: 0,   duration: 4000,  bg: "bg5" } // финал
     ]
   };
@@ -25,13 +26,15 @@ console.log("GAME.JS CLEAN FINAL v3");
   let state;
   let sceneRef;
 
+  const scene = { preload, create, update };
+
   new Phaser.Game({
     type: Phaser.AUTO,
     width: W,
     height: H,
     parent: "game",
     backgroundColor: "#000",
-    scene: { preload, create, update }
+    scene
   });
 
   /* ================= PRELOAD ================= */
@@ -41,15 +44,18 @@ console.log("GAME.JS CLEAN FINAL v3");
       this.load.image(`bg${i}`, `assets/bg/bglvl${i}.jpg`);
     }
 
-    const items = [
-      "cherry","strawberry","pineapple",
-      "poop","bomb","skull",
-      "eye","donut"
-    ];
+    // items
+    this.load.image("cherry", "assets/items/cherry.png");
+    this.load.image("strawberry", "assets/items/strawberry.png");
+    this.load.image("pineapple", "assets/items/pineapple.png");
 
-    items.forEach(k => {
-      this.load.image(k, `assets/items/${k}.png`);
-    });
+    this.load.image("poop", "assets/items/poop.png");
+    this.load.image("bomb", "assets/items/bomb.png");
+    this.load.image("skull", "assets/items/skull.png");
+
+    this.load.image("eye", "assets/items/eye.png");
+    this.load.image("heart", "assets/items/heart.png");
+    this.load.image("donut", "assets/items/donut.png");
   }
 
   /* ================= CREATE ================= */
@@ -62,25 +68,30 @@ console.log("GAME.JS CLEAN FINAL v3");
       lane: 1,
       lanesX: [],
       items: [],
+
       level: 0,
       levelTime: 0,
       spawnTimer: 0,
+
       speed: CONFIG.levels[0].speed,
+
       score: 0,
       lives: 3,
+
       shield: false,
       shieldUsed: 0,
+
       lastItem: null
     };
 
-    // BG
+    // background
     state.bg = this.add.image(W/2, H/2, "bg1")
       .setDisplaySize(W, H)
       .setAlpha(0);
 
-    this.tweens.add({ targets: state.bg, alpha: 1, duration: 600 });
+    this.tweens.add({ targets: state.bg, alpha: 1, duration: 800 });
 
-    // Lanes
+    // lanes
     const roadWidth = Math.min(W * 0.65, 520);
     const laneW = roadWidth / CONFIG.lanes;
     const cx = W / 2;
@@ -89,27 +100,43 @@ console.log("GAME.JS CLEAN FINAL v3");
       state.lanesX.push(cx - roadWidth/2 + laneW/2 + laneW * i);
     }
 
-    // Player
+    // player
     state.player = this.add.text(
       state.lanesX[state.lane],
-      H - 120,
+      H - 130,
       "🚗",
       { fontSize: `${CONFIG.carSize}px` }
     ).setOrigin(0.5);
 
     // UI
-    state.scoreText = this.add.text(16, 16, "0", { fontSize: "22px", color: "#fff" });
-    state.livesText = this.add.text(16, 44, "❤️❤️❤️", { fontSize: "20px" });
-    state.levelText = this.add.text(16, 70, "LVL 1", { fontSize: "14px", color: "#aaa" });
+    state.scoreText = this.add.text(16, 16, "0", {
+      fontSize: "22px",
+      color: "#fff",
+      fontFamily: "Arial"
+    });
 
-    // Rules
+    state.livesText = this.add.text(16, 44, "❤️❤️❤️", {
+      fontSize: "20px"
+    });
+
+    state.levelText = this.add.text(16, 70, "LVL 1", {
+      fontSize: "14px",
+      color: "#aaa"
+    });
+
+    // rules screen
     const rules = this.add.text(
-      W/2, H/2,
+      W/2,
+      H/2,
       "ПРАВИЛА\n\n" +
       "🍒 +100\n🍓 +200\n🍍 +300\n\n" +
       "💩 -100\n💣 -200\n☠️ -300\n\n" +
-      "🧿 ЩИТ 4 сек\n\nТАП — СТАРТ",
-      { fontSize: "20px", color: "#fff", align: "center" }
+      "🧿 ЩИТ (4 сек)\n❤️ +1 ЖИЗНЬ (1 раз)\n\nТАП — СТАРТ",
+      {
+        fontSize: "20px",
+        color: "#fff",
+        align: "center"
+      }
     ).setOrigin(0.5);
 
     let startX = 0;
@@ -133,7 +160,6 @@ console.log("GAME.JS CLEAN FINAL v3");
         0,
         CONFIG.lanes - 1
       );
-
       state.player.x = state.lanesX[state.lane];
     });
   }
@@ -146,7 +172,11 @@ console.log("GAME.JS CLEAN FINAL v3");
     state.levelTime += delta;
     state.spawnTimer += delta;
 
-    if (state.spawnTimer > CONFIG.spawnDelay && state.level < 5) {
+    const spawnDelay =
+      CONFIG.spawnBase -
+      state.level * 40; // чаще с каждым уровнем
+
+    if (state.spawnTimer > spawnDelay && state.level < 5) {
       state.spawnTimer = 0;
       spawnItem(sceneRef);
     }
@@ -155,8 +185,11 @@ console.log("GAME.JS CLEAN FINAL v3");
       const it = state.items[i];
       it.y += state.speed;
 
-      if (Math.abs(it.y - state.player.y) < 48 && it.lane === state.lane) {
-        applyItem(it);
+      if (
+        Math.abs(it.y - state.player.y) < 55 &&
+        it.lane === state.lane
+      ) {
+        handleItem(it);
         it.destroy();
         state.items.splice(i, 1);
         continue;
@@ -176,29 +209,30 @@ console.log("GAME.JS CLEAN FINAL v3");
   /* ================= ITEMS ================= */
 
   function spawnItem(scene) {
-    const pool = [
+    const weighted = [
+      // плюсы (чаще)
       "cherry","cherry","cherry",
-      "strawberry","strawberry",
-      "pineapple",
+      "strawberry","strawberry","strawberry",
+      "pineapple","pineapple",
+
+      // минусы
       "poop","poop",
       "bomb",
       "skull"
     ];
 
-    if (state.shieldUsed < 2 && Math.random() < 0.15) {
-      pool.push("eye");
+    if (state.shieldUsed < 2 && Math.random() < 0.12) {
+      weighted.push("eye");
+    }
+
+    if (state.lives < 3 && Math.random() < 0.05) {
+      weighted.push("heart");
     }
 
     let type;
-    let guard = 0;
-
     do {
-      type = Phaser.Utils.Array.GetRandom(pool);
-      guard++;
-      if (guard > 10) return;
+      type = Phaser.Utils.Array.GetRandom(weighted);
     } while (type === state.lastItem && Math.random() < 0.7);
-
-    if (!scene.textures.exists(type)) return;
 
     state.lastItem = type;
 
@@ -212,26 +246,22 @@ console.log("GAME.JS CLEAN FINAL v3");
 
     item.type = type;
     item.lane = lane;
-
     state.items.push(item);
   }
 
-  function applyItem(item) {
+  function handleItem(item) {
     if (item.type === "eye") return activateShield();
+    if (item.type === "heart") return gainLife();
 
-    const map = {
-      cherry: 100,
-      strawberry: 200,
-      pineapple: 300,
-      poop: -100,
-      bomb: -200,
-      skull: -300
-    };
+    if (item.type === "cherry") state.score += 100;
+    if (item.type === "strawberry") state.score += 200;
+    if (item.type === "pineapple") state.score += 300;
 
-    state.score += map[item.type] || 0;
+    if (item.type === "poop") damage(1);
+    if (item.type === "bomb") damage(2);
+    if (item.type === "skull") damage(3);
+
     state.scoreText.setText(state.score);
-
-    if (map[item.type] < 0) damage(Math.abs(map[item.type]) / 100);
   }
 
   function damage(d) {
@@ -240,6 +270,13 @@ console.log("GAME.JS CLEAN FINAL v3");
     if (state.lives < 0) state.lives = 0;
     state.livesText.setText("❤️".repeat(state.lives));
     if (state.lives <= 0) endGame();
+  }
+
+  function gainLife() {
+    if (state.lives < 4) {
+      state.lives++;
+      state.livesText.setText("❤️".repeat(state.lives));
+    }
   }
 
   function activateShield() {
@@ -254,7 +291,7 @@ console.log("GAME.JS CLEAN FINAL v3");
     });
   }
 
-  /* ================= LEVELS ================= */
+  /* ================= LEVEL FLOW ================= */
 
   function nextLevel(scene) {
     state.level++;
@@ -273,10 +310,10 @@ console.log("GAME.JS CLEAN FINAL v3");
     scene.tweens.add({
       targets: state.bg,
       alpha: 0,
-      duration: 300,
+      duration: 400,
       onComplete: () => {
         state.bg.setTexture(cfg.bg);
-        scene.tweens.add({ targets: state.bg, alpha: 1, duration: 500 });
+        scene.tweens.add({ targets: state.bg, alpha: 1, duration: 600 });
       }
     });
 
@@ -285,23 +322,28 @@ console.log("GAME.JS CLEAN FINAL v3");
     }
   }
 
+  /* ================= FINISH ================= */
+
   function showDonut(scene) {
     state.mode = "finish";
 
-    const donut = scene.add.image(W/2, -200, "donut")
-      .setDisplaySize(220, 220);
+    const donut = scene.add.image(
+      W / 2,
+      -200,
+      "donut"
+    ).setDisplaySize(220, 220);
 
     scene.tweens.add({
       targets: donut,
-      y: H/2,
+      y: H / 2,
       duration: 2800,
       ease: "Sine.easeOut"
     });
 
     scene.time.delayedCall(3200, () => {
       scene.add.text(
-        W/2,
-        H/2 + 160,
+        W / 2,
+        H / 2 + 160,
         "ПОЗДРАВЛЯЮ 🎉",
         { fontSize: "28px", color: "#fff" }
       ).setOrigin(0.5);
@@ -311,8 +353,8 @@ console.log("GAME.JS CLEAN FINAL v3");
   function endGame() {
     state.mode = "finish";
     sceneRef.add.text(
-      W/2,
-      H/2,
+      W / 2,
+      H / 2,
       "ИГРА ОКОНЧЕНА",
       { fontSize: "26px", color: "#ff4d6d" }
     ).setOrigin(0.5);
