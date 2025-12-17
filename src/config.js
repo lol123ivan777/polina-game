@@ -5,21 +5,13 @@ export const CONFIG = {
   lanes: 4,
 
   colors: {
-    bg: 0x0b0014,
-    road: 0x140016,
+    bg: "#0d0014",
+    road: 0x16001f,
     neon: 0xff2b8f,
-    text: "#ffffff"
+    ui: "#ffffff"
   },
 
-  player: {
-    yOffset: 120,
-    emoji: "🚗"
-  },
-
-  items: [
-    { type: "bad", icon: "💩", score: -100, weight: 30 },
-    { type: "bad", icon: "👻", score: -100, weight: 20 },
-    { type: "good", icon: "🍒", score: 100, weight: 25 },
-    { type: "good", icon: "🍓", score: 100, weight: 25 }
-  ]
+  speeds: {
+    base: 4
+  }
 };
