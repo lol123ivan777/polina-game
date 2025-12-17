@@ -11,13 +11,13 @@ console.log("GAME.JS LOADED v4");
     donutDelay: 4000,
 
     levels: {
-      1: { speed: 4.2, spawn: 850 },
-      2: { speed: 5.0, spawn: 780 },
-      3: { speed: 5.8, spawn: 720 },
-      4: { speed: 6.4, spawn: 680 },
-      5: { speed: 7.0, spawn: 650 },
-      6: { speed: 3.5, spawn: 9999 } // финал
-    }
+  1: { speed: 4.6, spawn: 850 },
+  2: { speed: 6.2, spawn: 560 },
+  3: { speed: 7.4, spawn: 520 },
+  4: { speed: 8.6, spawn: 490 },
+  5: { speed: 10.2, spawn: 470 },
+  6: { speed: 4.0, spawn: 9999 } // финал: без спавна
+}
   };
 
   const W = window.innerWidth;
@@ -89,14 +89,26 @@ console.log("GAME.JS LOADED v4");
     /* ---------- PLAYER ---------- */
 
     state.player = this.add.text(
-      state.lanesX[state.lane],
-      H - 120,
-      "🚗",
-      {
-        fontFamily: "Press Start 2P",
-        fontSize: "40px"
-      }
-    ).setOrigin(0.5);
+  state.lanesX[state.lane],
+  H - 135,
+  "🚗",
+  {
+    fontFamily: "Press Start 2P",
+    fontSize: "96px"
+  }
+).setOrigin(0.5);
+
+// небольшая тень, чтобы “вес” был
+state.player.setShadow(0, 6, "#000", 10, true, true);
+
+state.shieldAura = this.add.text(
+  state.player.x,
+  state.player.y,
+  "🟦",
+  { fontSize: "150px" }
+).setOrigin(0.5).setAlpha(0);
+
+state.shieldAura.setBlendMode(Phaser.BlendModes.ADD);
 
     /* ---------- UI ---------- */
 
@@ -118,28 +130,28 @@ console.log("GAME.JS LOADED v4");
     });
 
     /* ---------- RULES ---------- */
+    
+    state.rulesBox = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.82);
 
-    state.rules = this.add.text(
-      W/2, H/2,
-`ПРАВИЛА
+state.rules = this.add.text(
+  W/2, H/2,
+  "ПРАВИЛА\n\n" +
+  "🍒  +100     🍓  +200\n" +
+  "💩  -100     💣  -200\n" +
+  "💀  -1 жизнь (если нет щита)\n" +
+  "❤️  +1 жизнь (1 раз за игру)\n" +
+  "🛡  Щит 4 сек (2 раза за игру)\n\n" +
+  "СВАЙП ← →  |  ТАП — СТАРТ",
+  {
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
+    fontSize: "18px",
+    align: "center",
+    color: "#ffffff",
+    lineSpacing: 10
+  }
+).setOrigin(0.5);
 
-🍒 +100
-🍓 +200
-💩 -100
-💣 -200
-💀 -1 жизнь
-❤️ +1 жизнь (1 раз)
-🛡 щит 4 сек (2 раза)
-
-СВАЙП ← →
-ТАП — СТАРТ`,
-      {
-        fontFamily: "Press Start 2P",
-        fontSize: "12px",
-        align: "center",
-        color: "#fff"
-      }
-    ).setOrigin(0.5);
+state.rules.setShadow(0, 2, "#000", 8, true, true);
 
     /* ---------- INPUT ---------- */
 
@@ -150,6 +162,7 @@ console.log("GAME.JS LOADED v4");
       if (state.mode === "rules") {
         state.mode = "play";
         state.rules.destroy();
+        state.rulesBox.destroy();
         return;
       }
 
@@ -181,6 +194,16 @@ console.log("GAME.JS LOADED v4");
 
   function update(_, delta) {
     if (state.mode !== "play") return;
+
+    // щит следует за машиной
+state.shieldAura.x = state.player.x;
+state.shieldAura.y = state.player.y;
+
+if (state.shield) {
+  state.shieldAura.setAlpha(0.35);
+} else {
+  state.shieldAura.setAlpha(0);
+}
 
     state.timer += delta;
     state.spawnTimer += delta;
@@ -239,7 +262,7 @@ console.log("GAME.JS LOADED v4");
       emoji,
       {
         fontFamily: "Press Start 2P",
-        fontSize: "28px"
+        fontSize: "78px"
       }
     ).setOrigin(0.5);
 
@@ -271,6 +294,14 @@ console.log("GAME.JS LOADED v4");
 
     if (e === "🛡" && state.shieldUsed < 2) {
       state.shield = true;
+      scene.tweens.add({
+  targets: state.shieldAura,
+  alpha: { from: 0.0, to: 0.45 },
+  duration: 200,
+  yoyo: true,
+  repeat: 1
+});
+
       state.shieldUsed++;
       scene.time.delayedCall(4000, () => state.shield = false);
     }
@@ -350,7 +381,7 @@ console.log("GAME.JS LOADED v4");
       "GAME OVER",
       {
         fontFamily: "Press Start 2P",
-        fontSize: "22px",
+        fontSize: "130px",
         color: "#ff4d6d"
       }
     ).setOrigin(0.5);
