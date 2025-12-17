@@ -1,39 +1,27 @@
-const tg = window.Telegram?.WebApp;
-
-if (tg) {
-  tg.ready();
-  tg.expand();
-  tg.disableVerticalSwipes(); // чтобы не свайпался Telegram
-}
-
-document.title = "PolinaBibi v3";
-console.log("GAME.JS LOADED v3 — 4 LANES");
+document.title = "PolinaBibi v4";
+console.log("GAME.JS LOADED v4");
 
 (() => {
-  const W = window.innerWidth;
-  const H = window.innerHeight;
+
+  /* ================= CONFIG ================= */
 
   const CONFIG = {
     lanes: 4,
-    levelDurationDefault: 10000,
-    levelDurationLevel5: 15000,
-    maxLevel: 5,
+    levelDuration: 10000,
+    donutDelay: 4000,
 
     levels: {
-      1: { speed: 4,  spawn: 800 },
-      2: { speed: 6,  spawn: 690 },
-      3: { speed: 8,  spawn: 550 },
-      4: { speed: 10, spawn: 420 },
-      5: { speed: 15, spawn: 350 }, // почти ад
-    },
-
-    items: [
-      { emoji: "🍒", score:  100, weight: 3 },
-      { emoji: "🍓", score:  200, weight: 2 },
-      { emoji: "💩", score: -100, weight: 2 },
-      { emoji: "💣", score: -200, weight: 1 },
-    ]
+      1: { speed: 4.2, spawn: 850 },
+      2: { speed: 5.0, spawn: 780 },
+      3: { speed: 5.8, spawn: 720 },
+      4: { speed: 6.4, spawn: 680 },
+      5: { speed: 7.0, spawn: 650 },
+      6: { speed: 3.5, spawn: 9999 } // финал
+    }
   };
+
+  const W = window.innerWidth;
+  const H = window.innerHeight;
 
   let state;
 
@@ -48,87 +36,124 @@ console.log("GAME.JS LOADED v3 — 4 LANES");
     scene
   });
 
-  // ---------- PRELOAD ----------
+  /* ================= PRELOAD ================= */
+
   function preload() {
-    for (let i = 1; i <= CONFIG.maxLevel; i++) {
+    for (let i = 1; i <= 5; i++) {
       this.load.image(`bglvl${i}`, `assets/bg/bglvl${i}.jpg`);
     }
   }
 
-  // ---------- CREATE ----------
+  /* ================= CREATE ================= */
+
   function create() {
+
     state = {
-      mode: "idle",
-      lane: 1,
-      lanesX: [],
-      items: [],
-      spawnTimer: 0,
-      levelTimer: 0,
+      mode: "rules", // rules | play | transition | win | gameover
       level: 1,
-      score: 0,
+      timer: 0,
+      spawnTimer: 0,
+
       speed: CONFIG.levels[1].speed,
       spawnGap: CONFIG.levels[1].spawn,
-      goText: null
+
+      lanesX: [],
+      lane: 1,
+
+      items: [],
+      score: 0,
+      lives: 3,
+
+      lifeUsed: false,
+      shieldUsed: 0,
+      shield: false
     };
 
-    // BACKGROUND
+    /* ---------- BG ---------- */
+
     this.bg = this.add.image(W/2, H/2, "bglvl1")
       .setDisplaySize(W, H);
 
-    // затемнение для читаемости
-    this.dark = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.35);
+    /* ---------- LANES ---------- */
 
-    // ROAD
-    const roadW = Math.min(W * 0.7, 560);
+    const roadWidth = Math.min(W * 0.65, 560);
+    const laneW = roadWidth / CONFIG.lanes;
     const roadX = W / 2;
 
-    this.add.rectangle(roadX, H/2, roadW, H + 200, 0x000000, 0.25);
-
-    // LANES
-    const laneW = roadW / CONFIG.lanes;
     for (let i = 0; i < CONFIG.lanes; i++) {
       state.lanesX.push(
-        roadX - roadW/2 + laneW/2 + laneW * i
+        roadX - roadWidth/2 + laneW/2 + laneW * i
       );
     }
 
-    // PLAYER
+    /* ---------- PLAYER ---------- */
+
     state.player = this.add.text(
       state.lanesX[state.lane],
       H - 120,
       "🚗",
-      { fontSize: "42px" }
+      {
+        fontFamily: "Press Start 2P",
+        fontSize: "40px"
+      }
     ).setOrigin(0.5);
 
-    // UI
+    /* ---------- UI ---------- */
+
     state.scoreText = this.add.text(16, 16, "0", {
-      fontSize: "20px",
-      color: "#fff",
-      fontFamily: "monospace"
-    });
-
-    state.levelText = this.add.text(16, 40, "lvl 1", {
+      fontFamily: "Press Start 2P",
       fontSize: "14px",
-      color: "#aaa",
-      fontFamily: "monospace"
+      color: "#fff"
     });
 
-    const hint = this.add.text(
+    state.livesText = this.add.text(16, 40, "❤️❤️❤️", {
+      fontFamily: "Press Start 2P",
+      fontSize: "14px"
+    });
+
+    state.levelText = this.add.text(16, 64, "LVL 1", {
+      fontFamily: "Press Start 2P",
+      fontSize: "12px",
+      color: "#aaa"
+    });
+
+    /* ---------- RULES ---------- */
+
+    state.rules = this.add.text(
       W/2, H/2,
-      "ТАП — СТАРТ\nСВАЙП ← →",
-      { fontSize: "18px", color: "#fff", align: "center" }
+`ПРАВИЛА
+
+🍒 +100
+🍓 +200
+💩 -100
+💣 -200
+💀 -1 жизнь
+❤️ +1 жизнь (1 раз)
+🛡 щит 4 сек (2 раза)
+
+СВАЙП ← →
+ТАП — СТАРТ`,
+      {
+        fontFamily: "Press Start 2P",
+        fontSize: "12px",
+        align: "center",
+        color: "#fff"
+      }
     ).setOrigin(0.5);
+
+    /* ---------- INPUT ---------- */
 
     let startX = 0;
 
     this.input.on("pointerdown", p => {
-      if (state.mode === "idle") {
+
+      if (state.mode === "rules") {
         state.mode = "play";
-        hint.destroy();
+        state.rules.destroy();
         return;
       }
 
-      if (state.mode === "gameover") {
+      if (state.mode === "gameover" || state.mode === "win") {
         this.scene.restart();
         return;
       }
@@ -152,40 +177,32 @@ console.log("GAME.JS LOADED v3 — 4 LANES");
     });
   }
 
-  // ---------- UPDATE ----------
+  /* ================= UPDATE ================= */
+
   function update(_, delta) {
     if (state.mode !== "play") return;
 
-    // LEVEL //
-
-     state.levelTimer += delta;
-
-const levelLimit =
-  state.level === 5 ? CONFIG.levelDurationLevel5 : CONFIG.levelDurationDefault;
-
-if (state.levelTimer >= levelLimit) {
-  state.levelTimer = 0;
-  nextLevel(this);
-}
-
-    // SPAWN
+    state.timer += delta;
     state.spawnTimer += delta;
+
+    if (state.level < 6 && state.timer >= CONFIG.levelDuration) {
+      nextLevel(this);
+    }
+
     if (state.spawnTimer >= state.spawnGap) {
       state.spawnTimer = 0;
       spawnItem(this);
     }
 
-    // ITEMS MOVE
     for (let i = state.items.length - 1; i >= 0; i--) {
       const it = state.items[i];
       it.y += state.speed;
 
       if (
-        Math.abs(it.y - state.player.y) < 32 &&
+        Math.abs(it.y - state.player.y) < 28 &&
         it.lane === state.lane
       ) {
-        state.score += it.score;
-        state.scoreText.setText(state.score);
+        handleHit(this, it);
         it.destroy();
         state.items.splice(i, 1);
         continue;
@@ -198,78 +215,160 @@ if (state.levelTimer >= levelLimit) {
     }
   }
 
-  // ---------- SPAWN ITEM ----------
+  /* ================= ITEMS ================= */
+
   function spawnItem(scene) {
+
     const lane = Phaser.Math.Between(0, CONFIG.lanes - 1);
-    const item = weightedRandom(CONFIG.items);
+
+    let emoji = "🍒";
+
+    const r = Math.random();
+
+    if (r < 0.12) emoji = "💀";
+    else if (r < 0.25) emoji = "💣";
+    else if (r < 0.4) emoji = "💩";
+    else if (r < 0.6) emoji = "🍓";
+
+    if (!state.lifeUsed && Math.random() < 0.04) emoji = "❤️";
+    if (state.shieldUsed < 2 && Math.random() < 0.05) emoji = "🛡";
 
     const t = scene.add.text(
       state.lanesX[lane],
       -40,
-      item.emoji,
-      { fontSize: "34px" }
+      emoji,
+      {
+        fontFamily: "Press Start 2P",
+        fontSize: "28px"
+      }
     ).setOrigin(0.5);
 
     t.lane = lane;
-    t.score = item.score;
+    t.emoji = emoji;
 
     state.items.push(t);
   }
 
-  // ---------- NEXT LEVEL ----------
-  function nextLevel(scene) {
-  // если уже на 5 и таймер закончился -> победа
-  if (state.level >= CONFIG.maxLevel) {
-    win(scene);
-    return;
-  }
+  /* ================= HIT ================= */
 
-  state.level++;
-  const cfg = CONFIG.levels[state.level];
+  function handleHit(scene, it) {
 
-  state.speed = cfg.speed;
-  state.spawnGap = cfg.spawn;
+    const e = it.emoji;
 
-  state.levelText.setText("lvl " + state.level);
-  scene.bg.setTexture("bglvl" + state.level);
-}
+    if (e === "🍒") state.score += 100;
+    if (e === "🍓") state.score += 200;
+    if (e === "💩") state.score -= 100;
+    if (e === "💣") state.score -= 200;
 
-  // ---------- UTILS ----------
-  function weightedRandom(arr) {
-    const sum = arr.reduce((a, b) => a + b.weight, 0);
-    let r = Math.random() * sum;
-    for (const it of arr) {
-      if ((r -= it.weight) <= 0) return it;
+    if (e === "💀" && !state.shield) {
+      state.lives--;
     }
-    return arr[0];
+
+    if (e === "❤️" && !state.lifeUsed) {
+      state.lifeUsed = true;
+      state.lives++;
+    }
+
+    if (e === "🛡" && state.shieldUsed < 2) {
+      state.shield = true;
+      state.shieldUsed++;
+      scene.time.delayedCall(4000, () => state.shield = false);
+    }
+
+    if (state.lives <= 0) {
+      gameOver(scene);
+    }
+
+    state.scoreText.setText(state.score);
+    state.livesText.setText("❤️".repeat(state.lives));
   }
 
-function win(scene) {
-  if (state.mode !== "play") return;
+  /* ================= LEVEL ================= */
 
-  state.mode = "win";
+  function nextLevel(scene) {
 
-  // убираем все предметы
-  for (const it of state.items) it.destroy();
-  state.items.length = 0;
+    state.mode = "transition";
+    state.level++;
+    state.timer = 0;
 
-  // большой пончик (да, размер можно любой)
-  const donut = scene.add.text(
-    W / 2,
-    H / 2 - 40,
-    "🍩",
-    { fontSize: "140px" } // огромный
-  ).setOrigin(0.5);
+    for (const it of state.items) it.destroy();
+    state.items.length = 0;
 
-  scene.add.text(
-    W / 2,
-    H / 2 + 90,
-    "ТЫ ПРОШЁЛ(А) 5 УРОВЕНЬ\nИГРА ОКОНЧЕНА\n\nТАП — ЗАНОВО",
-    { fontSize: "20px", color: "#fff", align: "center" }
-  ).setOrigin(0.5);
+    scene.cameras.main.fadeOut(400);
 
-  // тап -> рестарт
-  scene.input.once("pointerdown", () => scene.scene.restart());
-}
+    scene.time.delayedCall(500, () => {
+
+      if (state.level <= 5) {
+        scene.bg.setTexture(`bglvl${state.level}`);
+      }
+
+      state.speed = CONFIG.levels[state.level].speed;
+      state.spawnGap = CONFIG.levels[state.level].spawn;
+
+      state.levelText.setText("LVL " + state.level);
+
+      scene.cameras.main.fadeIn(400);
+
+      state.mode = "play";
+
+      if (state.level === 6) {
+        scene.time.delayedCall(CONFIG.donutDelay, () => spawnDonut(scene));
+      }
+    });
+  }
+
+  /* ================= DONUT ================= */
+
+  function spawnDonut(scene) {
+
+    const donut = scene.add.text(
+      W/2,
+      -120,
+      "🍩",
+      {
+        fontFamily: "Press Start 2P",
+        fontSize: "120px"
+      }
+    ).setOrigin(0.5);
+
+    scene.tweens.add({
+      targets: donut,
+      y: H/2,
+      duration: 3000,
+      ease: "Sine.easeOut",
+      onComplete: () => win(scene)
+    });
+  }
+
+  /* ================= END ================= */
+
+  function gameOver(scene) {
+    state.mode = "gameover";
+
+    scene.add.text(
+      W/2, H/2,
+      "GAME OVER",
+      {
+        fontFamily: "Press Start 2P",
+        fontSize: "22px",
+        color: "#ff4d6d"
+      }
+    ).setOrigin(0.5);
+  }
+
+  function win(scene) {
+    state.mode = "win";
+
+    scene.add.text(
+      W/2,
+      H/2 + 140,
+      "ПОЗДРАВЛЯЮ",
+      {
+        fontFamily: "Press Start 2P",
+        fontSize: "22px",
+        color: "#fff"
+      }
+    ).setOrigin(0.5);
+  }
 
 })();
